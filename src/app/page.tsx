@@ -3,6 +3,8 @@ import Link from 'next/link';
 import DeleteProjectButton from '@/components/DeleteProjectButton';
 import ProjectList from '@/components/ProjectList';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Home() {
   const projects = await getAllProjects();
 
