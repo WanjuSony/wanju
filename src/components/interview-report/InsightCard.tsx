@@ -127,12 +127,36 @@ export function InsightCard({ item, onJump, onDelete, onUpdate, researchQuestion
                 {item.source === 'user' && (
                     <span className="absolute top-2 right-2 text-[10px] uppercase font-bold text-indigo-400 border border-indigo-100 px-1.5 rounded-full bg-indigo-50">User</span>
                 )}
+
+                {/* Evidence (Quote) Section */}
+                {item.evidence && (
+                    <div className="mb-3 bg-slate-50 border-l-2 border-slate-300 pl-3 py-2 rounded-r-lg">
+                        <p className="text-xs text-slate-600 italic font-medium mb-1">
+                            &ldquo;{item.evidence}&rdquo;
+                        </p>
+                        {item.sourceSegmentId && (
+                            <div className="flex flex-wrap gap-2 justify-end">
+                                {item.sourceSegmentId.split(',').map((ref, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => onJump(ref.trim())}
+                                        className="text-[10px] text-brand-600 font-bold hover:underline flex items-center gap-1"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        {ref.trim()}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="prose prose-sm prose-slate max-w-none mb-1">
                     <ReactMarkdown>{item.content}</ReactMarkdown>
                 </div>
 
                 {item.meaning && (
-                    <div className="bg-slate-50 p-2 rounded-lg mt-2 text-xs text-slate-600">
+                    <div className="bg-slate-50 p-2 rounded-lg mt-2 text-xs text-slate-600 border border-slate-100">
                         <span className="font-bold text-slate-400 uppercase text-[10px]">이유 / 맥락 (Why / Context)</span>
                         <div className="mt-1"><ReactMarkdown>{item.meaning}</ReactMarkdown></div>
                     </div>
@@ -145,7 +169,8 @@ export function InsightCard({ item, onJump, onDelete, onUpdate, researchQuestion
                     </div>
                 )}
 
-                {item.sourceSegmentId && (
+                {/* Fallback timestamp if no evidence but has timestamp */}
+                {!item.evidence && item.sourceSegmentId && (
                     <div className="flex flex-wrap gap-2 mt-2 justify-end">
                         {item.sourceSegmentId.split(',').map((ref, idx) => (
                             <button

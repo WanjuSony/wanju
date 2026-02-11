@@ -226,7 +226,7 @@ export default function LiveInterviewManager({ projectId, studyId, guideBlocks, 
             </div>
 
             {/* Guide Content */}
-            <div className="flex-1 max-w-3xl mx-auto w-full p-8 pb-32">
+            <div className="flex-1 max-w-6xl mx-auto w-full p-8 pb-32">
 
                 {/* Tabs */}
                 <div className="flex gap-2 mb-6">
