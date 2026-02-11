@@ -33,34 +33,29 @@ export async function getAllProjects(): Promise<Project[]> {
 }
 
 export async function getProject(id: string): Promise<ProjectData | null> {
-    // 1. Fetch Project
-    const { data: projectRow, error: projectError } = await supabase
+    const { data: projectData, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+            *,
+            personas (*),
+            studies (
+                *,
+                interviews (
+                    *,
+                    insights (*)
+                )
+            )
+        `)
         .eq('id', id)
         .single();
 
-    if (projectError || !projectRow) return null;
+    if (error || !projectData) {
+        console.error('Error fetching project:', error);
+        return null;
+    }
 
-    const project: Project = {
-        id: projectRow.id,
-        title: projectRow.title,
-        description: projectRow.description,
-        goal: projectRow.goal,
-        exitCriteria: projectRow.exit_criteria,
-        status: projectRow.status,
-        createdAt: projectRow.created_at,
-        updatedAt: projectRow.updated_at,
-        order: projectRow.order
-    };
-
-    // 2. Fetch Personas
-    const { data: personaRows } = await supabase
-        .from('personas')
-        .select('*')
-        .eq('project_id', id);
-
-    const personas: Persona[] = (personaRows || []).map((row: any) => ({
+    // Map Personas
+    const personas: Persona[] = (projectData.personas || []).map((row: any) => ({
         id: row.id,
         name: row.name,
         description: row.description,
@@ -68,83 +63,71 @@ export async function getProject(id: string): Promise<ProjectData | null> {
         role: row.characteristics?.role || '',
         background: row.characteristics?.background || '',
         characteristics: row.characteristics,
-        // Map legacy fields if they exist in JSON
         ...row.characteristics
     }));
 
-    // 3. Fetch Studies
-    const { data: studyRows } = await supabase
-        .from('studies')
-        .select('*')
-        .eq('project_id', id);
-
-    const studies: ResearchStudy[] = [];
-
-    for (const studyRow of (studyRows || [])) {
-        // Fetch Interviews for this study
-        const { data: interviewRows } = await supabase
-            .from('interviews')
-            .select('*')
-            .eq('study_id', studyRow.id);
-
-        const sessions: RealInterview[] = [];
-
-        for (const interviewRow of (interviewRows || [])) {
-            // Fetch Insights
-            const { data: insightRows } = await supabase
-                .from('insights')
-                .select('*')
-                .eq('interview_id', interviewRow.id);
-
-            const structuredData: StructuredInsight[] = (insightRows || []).map((r: any) => ({
+    // Map Studies
+    const studies: ResearchStudy[] = (projectData.studies || []).map((studyRow: any) => {
+        // Map Interviews
+        const sessions: RealInterview[] = (studyRow.interviews || []).map((interviewRow: any) => {
+            // Map Insights
+            const structuredData: StructuredInsight[] = (interviewRow.insights || []).map((r: any) => ({
                 id: r.id,
                 type: r.type,
                 content: r.content,
-                source: 'user', // Default or need column
+                source: 'user',
                 evidence: r.evidence,
                 importance: r.importance
             }));
 
-            sessions.push({
+            return {
                 id: interviewRow.id,
                 projectId: id,
                 studyId: studyRow.id,
                 title: interviewRow.title,
-                transcriptId: '', // Legacy/Check usage
+                transcriptId: '',
                 date: interviewRow.date,
                 structuredData,
                 summary: interviewRow.summary,
-                content: interviewRow.transcript, // Mapped from DB 'transcript'
+                content: interviewRow.transcript,
                 participants: interviewRow.participants,
                 audioUrl: interviewRow.recording_url,
-                videoUrl: interviewRow.recording_url, // Map consistently
-                note: {}, // Default empty note if not in DB
-                // Add fields that might be missing in DB but needed in Type
-            } as any);
-        }
+                videoUrl: interviewRow.recording_url,
+                note: {},
+            };
+        });
 
-        studies.push({
+        return {
             id: studyRow.id,
             projectId: id,
             title: studyRow.title,
-            description: studyRow.description, // Type has description? Check type
+            description: studyRow.description,
             createdAt: studyRow.created_at,
-            updatedAt: studyRow.created_at, // DB might not have updated_at for studies
-            status: 'planning', // DB missing status?
+            updatedAt: studyRow.created_at,
+            status: 'planning',
             plan: {
                 purpose: studyRow.description || '',
-                // ... map other plan fields from JSON or columns
-                ...studyRow.questions // Assumption
-            } as any,
+                ...studyRow.questions
+            },
             sessions,
             discussionGuide: studyRow.questions?.discussionGuide || [],
             participantIds: [],
             changeLogs: []
-        } as any);
-    }
+        };
+    });
 
     return {
-        project,
+        project: {
+            id: projectData.id,
+            title: projectData.title,
+            description: projectData.description,
+            goal: projectData.goal,
+            exitCriteria: projectData.exit_criteria,
+            status: projectData.status,
+            createdAt: projectData.created_at,
+            updatedAt: projectData.updated_at,
+            order: projectData.order
+        },
         studies,
         personas
     };
