@@ -9,6 +9,7 @@ import { ProjectStatusBadge } from '@/components/ProjectStatusBadge';
 interface Props {
     project: Project;
     activeTab: string;
+    onTabChange: (tab: string) => void;
     counts: {
         studies: number;
         personas: number;
@@ -16,7 +17,7 @@ interface Props {
     }
 }
 
-export function ProjectHeader({ project, activeTab, counts }: Props) {
+export function ProjectHeader({ project, activeTab, onTabChange, counts }: Props) {
     const [isEditing, setIsEditing] = useState(false);
 
     return (
@@ -50,42 +51,42 @@ export function ProjectHeader({ project, activeTab, counts }: Props) {
                 </div>
 
                 <div className="flex gap-1 md:gap-4 overflow-x-auto pb-px">
-                    <Link
-                        href={`/projects/${project.id}?tab=studies`}
+                    <button
+                        onClick={() => onTabChange('studies')}
                         className={`px-4 pb-4 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === 'studies'
                             ? 'border-brand-600 text-brand-600'
                             : 'border-transparent text-slate-400 hover:text-slate-600'
                             }`}
                     >
                         Interviews / Research <span className="ml-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-400 transition-colors uppercase">{counts.studies}</span>
-                    </Link>
-                    <Link
-                        href={`/projects/${project.id}?tab=personas`}
+                    </button>
+                    <button
+                        onClick={() => onTabChange('personas')}
                         className={`px-4 pb-4 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === 'personas'
                             ? 'border-brand-600 text-brand-600'
                             : 'border-transparent text-slate-400 hover:text-slate-600'
                             }`}
                     >
                         Personas <span className="ml-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-400 transition-colors uppercase">{counts.personas}</span>
-                    </Link>
-                    <Link
-                        href={`/projects/${project.id}?tab=knowledge`}
+                    </button>
+                    <button
+                        onClick={() => onTabChange('knowledge')}
                         className={`px-4 pb-4 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === 'knowledge'
                             ? 'border-brand-600 text-brand-600'
                             : 'border-transparent text-slate-400 hover:text-slate-600'
                             }`}
                     >
                         Knowledge Base <span className="ml-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-400 transition-colors uppercase">{counts.knowledge}</span>
-                    </Link>
-                    <Link
-                        href={`/projects/${project.id}?tab=ai-chat`}
+                    </button>
+                    <button
+                        onClick={() => onTabChange('ai-chat')}
                         className={`px-4 pb-4 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === 'ai-chat'
                             ? 'border-brand-600 text-brand-600'
                             : 'border-transparent text-slate-400 hover:text-slate-600'
                             }`}
                     >
                         Project Strategy AI <span className="ml-1 text-[10px] bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded-full transition-colors uppercase font-black">AI</span>
-                    </Link>
+                    </button>
                 </div>
             </div>
 
