@@ -1,6 +1,6 @@
 'use server';
 
-import { getProject, saveProjectData } from '@/lib/store/projects';
+import { getProject, saveProjectData, deleteInterview, deleteInsight } from '@/lib/store/projects';
 import { revalidatePath } from 'next/cache';
 import { RealInterview, Persona } from '@/lib/types';
 import { transcribeMedia } from '@/lib/transcription-service';
@@ -12,6 +12,7 @@ import { Buffer } from 'buffer';
 import fs from 'fs';
 import path from 'path';
 import { safeParseJSON } from '@/lib/transcript-json-parser';
+import { supabase } from '@/lib/supabase';
 
 async function extractContent(file: File): Promise<string> {
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -125,29 +126,29 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
         }
 
         // Process Audio/Video Uploads
-        let audioUrl = undefined;
-        let videoUrl = undefined;
+        let audioUrl: string | undefined = undefined;
+        let videoUrl: string | undefined = undefined;
 
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-        if ((fileAudio || fileVideo) && !fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
+        const uploadFileToSupabase = async (file: File) => {
+            const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+            const { error } = await supabase.storage.from('uploads').upload(fileName, file, {
+                upsert: true
+            });
+            if (error) {
+                console.error("Supabase Storage Upload Error:", error);
+                throw new Error("Failed to upload file to Supabase Storage");
+            }
+            const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+            return publicUrlData.publicUrl;
+        };
 
         if (fileAudio) {
-            const fileName = `${Date.now()}-${fileAudio.name}`;
-            const filePath = path.join(uploadDir, fileName);
-            const buffer = Buffer.from(await fileAudio.arrayBuffer());
-            await fs.promises.writeFile(filePath, buffer);
-            audioUrl = `/uploads/${fileName}`;
+            audioUrl = await uploadFileToSupabase(fileAudio);
             if (!title) title = fileAudio.name.replace(/\.[^/.]+$/, "");
         }
 
         if (fileVideo) {
-            const fileName = `${Date.now()}-${fileVideo.name}`;
-            const filePath = path.join(uploadDir, fileName);
-            const buffer = Buffer.from(await fileVideo.arrayBuffer());
-            await fs.promises.writeFile(filePath, buffer);
-            videoUrl = `/uploads/${fileName}`;
+            videoUrl = await uploadFileToSupabase(fileVideo);
             if (!title) title = fileVideo.name.replace(/\.[^/.]+$/, "");
         }
 
@@ -241,17 +242,18 @@ export async function uploadInterviewAudioAction(projectId: string, studyId: str
     const interview = study?.sessions.find(i => i.id === interviewId);
     if (!interview) return;
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const { error } = await supabase.storage.from('uploads').upload(fileName, file, {
+        upsert: true
+    });
+
+    if (error) {
+        console.error("Supabase Storage Upload Error:", error);
+        return;
     }
 
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = path.join(uploadDir, fileName);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.promises.writeFile(filePath, buffer);
-
-    interview.audioUrl = `/uploads/${fileName}`;
+    const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+    interview.audioUrl = publicUrlData.publicUrl;
 
     await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
@@ -268,17 +270,18 @@ export async function uploadInterviewVideoAction(projectId: string, studyId: str
     const interview = study?.sessions.find(i => i.id === interviewId);
     if (!interview) return;
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const { error } = await supabase.storage.from('uploads').upload(fileName, file, {
+        upsert: true
+    });
+
+    if (error) {
+        console.error("Supabase Storage Upload Error:", error);
+        return;
     }
 
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = path.join(uploadDir, fileName);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.promises.writeFile(filePath, buffer);
-
-    interview.videoUrl = `/uploads/${fileName}`;
+    const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+    interview.videoUrl = publicUrlData.publicUrl;
 
     await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
@@ -309,20 +312,22 @@ export async function uploadLiveInterviewAction(projectId: string, studyId: stri
     const studyIndex = data.studies.findIndex(s => s.id === studyId);
     if (studyIndex === -1) throw new Error('Study not found');
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
     let savedAudioUrl = undefined;
     if (audioFile && audioFile.size > 0) {
         try {
             const ext = path.extname(audioFile.name) || '.webm';
             const fileName = `live-audio-${Date.now()}${ext}`;
-            const filePath = path.join(uploadDir, fileName);
-            const buffer = Buffer.from(await audioFile.arrayBuffer());
-            await fs.promises.writeFile(filePath, buffer);
-            savedAudioUrl = `/uploads/${fileName}`;
+
+            const { error } = await supabase.storage.from('uploads').upload(fileName, audioFile, {
+                upsert: true
+            });
+
+            if (error) {
+                console.error("Supabase Storage Live Upload Error:", error);
+            } else {
+                const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+                savedAudioUrl = publicUrlData.publicUrl;
+            }
         } catch (e) {
             console.error("Failed to save live audio file:", e);
         }
@@ -448,17 +453,8 @@ export async function autoTranscribeMediaAction(projectId: string, studyId: stri
 }
 
 export async function deleteInterviewAction(projectId: string, studyId: string, interviewId: string) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
-
-    const study = data.studies.find(s => s.id === studyId);
-    if (!study) throw new Error("Study not found");
-
-    if (study.sessions) {
-        study.sessions = study.sessions.filter(s => s.id !== interviewId);
-        await saveProjectData(data);
-        revalidatePath(`/projects/${projectId}/studies/${studyId}`);
-    }
+    await deleteInterview(interviewId);
+    revalidatePath(`/projects/${projectId}/studies/${studyId}`);
 }
 
 export async function updateInterviewMetadataAction(
@@ -568,20 +564,8 @@ export async function updateInterviewNoteAction(
     revalidatePath(`/projects/${projectId}`);
 }
 export async function deleteInsightAction(projectId: string, studyId: string, interviewId: string, insightId: string) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
-
-    const study = data.studies.find(s => s.id === studyId);
-    if (!study) throw new Error("Study not found");
-
-    const interview = study.sessions.find(s => s.id === interviewId);
-    if (!interview) throw new Error("Interview not found");
-
-    if (interview.structuredData) {
-        interview.structuredData = interview.structuredData.filter(i => i.id !== insightId);
-        await saveProjectData(data);
-        revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
-    }
+    await deleteInsight(insightId);
+    revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
 }
 
 export async function updateInsightAction(projectId: string, studyId: string, interviewId: string, insightId: string, updates: any) {

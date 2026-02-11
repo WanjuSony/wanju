@@ -25,6 +25,8 @@ export interface KnowledgeDocument {
 export interface Persona {
   id: string;
   name: string;
+  description?: string; // Added for DB compatibility
+  avatar?: string; // Added for DB compatibility
   role: string;
   company?: string;
   source?: 'ai' | 'real'; // 'ai' = Generated, 'real' = From Actual Interview
@@ -158,6 +160,7 @@ export interface ResearchStudy {
   id: string;
   projectId: string;
   title: string;
+  description?: string; // Added for DB compatibility
   createdAt: string;
   updatedAt: string;
   status: 'planning' | 'recruiting' | 'fieldwork' | 'analysis' | 'done';
@@ -180,6 +183,8 @@ export interface StructuredInsight {
   meaning?: string;       // For 'Why'
   recommendation?: string; // For 'Next Step'
   researchQuestion?: string; // The specific research question this insight answers
+  evidence?: string; // Added for DB
+  importance?: string; // Added for DB
 }
 
 export interface SimulationSession {
@@ -209,6 +214,7 @@ export interface RealInterview {
   summary?: string; // High-level summary of the interview
   interviewerFeedback?: string; // Critique of the interviewer's performance
   participantId?: string; // Link to specific persona if applicable
+  participants?: any; // Added for DB compatibility (jsonb)
   content?: string; // Transcript text
   segments?: TranscriptSegment[]; // Structured Transcript Data
   audioUrl?: string; // URL of the audio recording

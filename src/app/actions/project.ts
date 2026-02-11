@@ -1,6 +1,6 @@
 'use server';
 
-import { createProject, getProject, saveProjectData, deleteProject } from '@/lib/store/projects';
+import { createProject, getProject, saveProjectData, deleteProject, deleteStudy } from '@/lib/store/projects';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { StudyPlan, GuideBlock, KnowledgeDocument, RealInterview, SimulationSession } from '@/lib/types';
@@ -161,12 +161,7 @@ export async function deleteProjectAction(projectId: string) {
 }
 
 export async function deleteStudyAction(projectId: string, studyId: string) {
-    const data = await getProject(projectId);
-    if (!data) return;
-
-    data.studies = data.studies.filter(s => s.id !== studyId);
-    await saveProjectData(data);
-
+    await deleteStudy(studyId);
     redirect(`/projects/${projectId}`);
 }
 
