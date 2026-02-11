@@ -153,22 +153,22 @@ export default function StudyWizard({ projectId, availablePersonas }: Props) {
                     )}
                     {step === 6 && (
                         <div className="grid grid-cols-3 gap-4 h-full content-start">
-                            {(['Qualitative', 'Quantitative', 'Mixed'] as const).map(type => (
+                            {(['idp', 'survey', 'ut'] as const).map(type => (
                                 <div
                                     key={type}
-                                    onClick={() => updateField('methodology', { ...formData.methodology, type: type as any })}
-                                    className={`p-6 rounded-xl border-2 cursor-pointer transition text-center h-[200px] flex flex-col justify-center items-center ${formData.methodology.type === type
+                                    onClick={() => updateField('methodology', { ...formData.methodology, type: type })}
+                                    className={`p-6 rounded-xl border-2 cursor-pointer transition text-center h-[200px] flex flex-col justify-center items-center ${formData.methodology?.type === type
                                         ? 'border-brand-600 bg-brand-50 text-brand-700'
                                         : 'border-slate-100 hover:border-brand-300'
                                         }`}
                                 >
                                     <div className="text-3xl mb-4">
-                                        {type === 'Qualitative' ? '🗣️' :
-                                            type === 'Quantitative' ? '📊' : '⚖️'}
+                                        {type === 'idp' ? '🗣️' :
+                                            type === 'survey' ? '📊' : '⚖️'}
                                     </div>
                                     <div className="font-bold text-lg mb-1">
-                                        {type === 'Qualitative' ? '정성 조사 (인터뷰)' :
-                                            type === 'Quantitative' ? '정량 조사 (설문)' : '복합 조사'}
+                                        {type === 'idp' ? '정성 조사 (인터뷰)' :
+                                            type === 'survey' ? '정량 조사 (설문)' : '복합 조사'}
                                     </div>
                                 </div>
                             ))}

@@ -26,7 +26,7 @@ export default async function ResumeSimulationPage({ params }: Props) {
         <div className="min-h-screen bg-slate-50 flex flex-col">
             <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center">
                 <div className="flex items-center gap-4">
-                    <Link href={`/projects/${id}/studies/${studyId}`} className="text-slate-500 hover:text-slate-800 text-sm font-bold">
+                    <Link href={`/projects/${id}/studies/${studyId}?tab=execution`} className="text-slate-500 hover:text-slate-800 text-sm font-bold">
                         &larr; Exit
                     </Link>
                     <h1 className="text-sm font-bold text-slate-900 border-l border-slate-200 pl-4">

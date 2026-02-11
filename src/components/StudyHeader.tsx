@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { updateStudyTitleAction } from '@/app/actions';
 import { ResearchStudy } from '@/lib/types';
+import { StudyStatusSelector } from './StudyStatusSelector';
+import { StudyHypotheses } from './StudyHypotheses';
 
 interface Props {
     projectTitle: string;
@@ -36,9 +38,16 @@ export function StudyHeader({ projectTitle, study }: Props) {
                 </Link>
                 <div className="flex justify-between items-start">
                     <div className="w-full">
-                        <span className="text-brand-600 text-xs font-bold uppercase tracking-wider mb-2 block">
-                            {study.plan.methodology.type}
-                        </span>
+                        <div className="flex items-center gap-3 mb-2">
+                            <span className="text-brand-600 text-xs font-bold uppercase tracking-wider block">
+                                {study.plan.methodology.type}
+                            </span>
+                            <StudyStatusSelector
+                                projectId={study.projectId}
+                                studyId={study.id}
+                                currentStatus={study.status}
+                            />
+                        </div>
 
                         {isEditing ? (
                             <div className="flex items-center gap-2 mb-2 max-w-3xl">
@@ -86,10 +95,20 @@ export function StudyHeader({ projectTitle, study }: Props) {
                         <div className="flex items-center gap-2 text-sm text-slate-500">
                             <span>{projectTitle}</span>
                             <span>•</span>
-                            <span>{new Date(study.createdAt).toLocaleDateString()}</span>
+                            <span>{new Date(study.createdAt).getFullYear()}. {String(new Date(study.createdAt).getMonth() + 1).padStart(2, '0')}. {String(new Date(study.createdAt).getDate()).padStart(2, '0')}.</span>
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div className="max-w-7xl mx-auto w-full mt-6 pt-4 border-t border-slate-100">
+                <StudyHypotheses
+                    projectId={study.projectId}
+                    studyId={study.id}
+                    initialQuestions={study.plan.researchQuestions || []}
+                    verifications={study.plan.hypothesisVerifications}
+                    sessions={study.sessions}
+                />
             </div>
         </header>
     );

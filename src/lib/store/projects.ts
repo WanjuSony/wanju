@@ -30,8 +30,21 @@ export async function getAllProjects(): Promise<Project[]> {
         }
     }
 
-    // Sort by update time desc
-    return projects.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    // Sort by order and date
+    // Logic: Unordered (new) items appear at the top (order = -1), sorted by Date Desc.
+    // Ordered items appear after, sorted by Order Asc.
+    return projects.sort((a, b) => {
+        const orderA = a.order ?? -1;
+        const orderB = b.order ?? -1;
+
+        if (orderA === -1 && orderB === -1) {
+            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        }
+        if (orderA === -1) return -1;
+        if (orderB === -1) return 1;
+
+        return orderA - orderB;
+    });
 }
 
 export async function getProject(id: string): Promise<ProjectData | null> {

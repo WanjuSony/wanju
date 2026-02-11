@@ -9,7 +9,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
   --font-mono: var(--font-geist-mono);
 
   /* Brand Palette - anchored on 600: #3A8DFF (User Request) */
@@ -26,6 +26,31 @@
   --color-brand-800: #0056b8;
   --color-brand-900: #00428a;
   --color-brand-950: #002b5c;
+
+  /* Global Color Unification (User Request: Unify Purple/Sky to Brand Blue) */
+  --color-indigo-50: var(--color-brand-50);
+  --color-indigo-100: var(--color-brand-100);
+  --color-indigo-200: var(--color-brand-200);
+  --color-indigo-300: var(--color-brand-300);
+  --color-indigo-400: var(--color-brand-400);
+  --color-indigo-500: var(--color-brand-500);
+  --color-indigo-600: var(--color-brand-600);
+  --color-indigo-700: var(--color-brand-700);
+  --color-indigo-800: var(--color-brand-800);
+  --color-indigo-900: var(--color-brand-900);
+  --color-indigo-950: var(--color-brand-950);
+
+  --color-sky-50: var(--color-brand-50);
+  --color-sky-100: var(--color-brand-100);
+  --color-sky-200: var(--color-brand-200);
+  --color-sky-300: var(--color-brand-300);
+  --color-sky-400: var(--color-brand-400);
+  --color-sky-500: var(--color-brand-500);
+  --color-sky-600: var(--color-brand-600);
+  --color-sky-700: var(--color-brand-700);
+  --color-sky-800: var(--color-brand-800);
+  --color-sky-900: var(--color-brand-900);
+  --color-sky-950: var(--color-brand-950);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -38,5 +63,5 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }

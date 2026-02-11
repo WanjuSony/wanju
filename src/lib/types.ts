@@ -1,4 +1,5 @@
 export interface TranscriptSegment {
+  id?: string;
   speaker: string;
   timestamp: string;
   text: string;
@@ -7,6 +8,7 @@ export interface TranscriptSegment {
 export interface Transcript {
   id: string; // filename
   title: string;
+  headers: string[]; // Metadata lines (Date, Duration, etc.)
   segments: TranscriptSegment[];
   rawContent: string;
 }
@@ -25,6 +27,8 @@ export interface Persona {
   name: string;
   role: string;
   company?: string;
+  source?: 'ai' | 'real'; // 'ai' = Generated, 'real' = From Actual Interview
+  sourceId?: string; // If real, the Interview ID
   background: string;
   psychographics: {
     motivations: string[];
@@ -52,9 +56,10 @@ export interface Persona {
     communicationTips: string[]; // How to talk to them
   };
   documents?: KnowledgeDocument[]; // Added context documents
+  interviewIds?: string[]; // IDs of interviews linked to this persona
 }
 
-export type ProjectStatus = 'planning' | 'simulation' | 'execution' | 'done';
+export type ProjectStatus = 'planning' | 'simulation' | 'execution' | 'completed';
 
 export interface Project {
   id: string;
@@ -65,7 +70,9 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   status: ProjectStatus;
+  order?: number;
   documents?: KnowledgeDocument[]; // Project-level knowledge (Specs, Guidelines)
+  chatSessions?: ChatSession[]; // Strategic AI Chat History
 }
 
 export type ResearchMethodology = 'idp' | 'survey' | 'ut' | 'unknown';
@@ -101,6 +108,50 @@ export interface StudyPlan {
     type: ResearchMethodology;
     reason: string;
   };
+  hypothesisVerifications?: Record<string, { // Key: Research Question Index
+    status: 'supported' | 'refuted' | 'partial' | 'inconclusive' | 'pending';
+    evidence: string;
+  }>;
+}
+
+
+export interface WeeklyReport {
+  id: string;
+  createdAt: string;
+  title: string;
+  interviewIds: string[]; // List of interview IDs used
+  content: string; // The markdown report
+}
+
+export interface GuideBlock {
+  id: string;
+  type: 'question' | 'script' | 'section'; // script = greeting, instruction, transition
+  content: string;
+}
+
+export interface ChangeLogEntry {
+  id: string;
+  timestamp: string;
+  type: 'plan' | 'guide';
+  summary: string; // e.g. "Modified Research Purpose", "Added 3 questions"
+}
+
+export interface ChatSession {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: {
+    role: 'user' | 'model';
+    text: string;
+    attachments?: {
+      name: string;
+      type: 'image' | 'file';
+      url?: string; // If persisted
+      data?: string; // Base64 for ephemeral/sending
+      mimeType?: string;
+    }[];
+  }[];
+  selectedContextIds?: string[]; // IDs of studies or documents selected as context
 }
 
 export interface ResearchStudy {
@@ -113,31 +164,22 @@ export interface ResearchStudy {
   plan: StudyPlan;
   sessions: RealInterview[]; // Actual interviews
   simulationSessions?: SimulationSession[]; // AI Simulation sessions
+  chatSessions?: ChatSession[]; // AI Helper Chat History
   participantIds: string[]; // IDs of Personas cast for this study
   discussionGuide: GuideBlock[]; // The list of questions for the interview
   changeLogs: ChangeLogEntry[];
-}
-
-export interface GuideBlock {
-  id: string;
-  type: 'question' | 'script'; // script = greeting, instruction, transition
-  content: string;
-}
-
-export interface ChangeLogEntry {
-  id: string;
-  timestamp: string;
-  type: 'plan' | 'guide';
-  summary: string; // e.g. "Modified Research Purpose", "Added 3 questions"
+  reports?: WeeklyReport[];
 }
 
 export interface StructuredInsight {
   id: string;
   sourceSegmentId?: string; // Reference to specific part of transcript for Grounding
   type: 'fact' | 'insight' | 'action';
+  source?: 'ai' | 'user'; // Distinguish between AI-generated and User-added
   content: string;
   meaning?: string;       // For 'Why'
   recommendation?: string; // For 'Next Step'
+  researchQuestion?: string; // The specific research question this insight answers
 }
 
 export interface SimulationSession {
@@ -149,7 +191,9 @@ export interface SimulationSession {
     role: 'interviewer' | 'persona';
     text: string;
   }[];
-  insights?: string; // AI generated analysis based on study goals
+  insights?: string; // Kept for backward compatibility (markdown fallback)
+  summary?: string;
+  structuredData?: StructuredInsight[];
 }
 
 export interface RealInterview {
@@ -159,9 +203,23 @@ export interface RealInterview {
   title: string;
   transcriptId: string;
   date: string;
+  startTime?: string;
+  endTime?: string;
   structuredData: StructuredInsight[];
+  summary?: string; // High-level summary of the interview
+  interviewerFeedback?: string; // Critique of the interviewer's performance
   participantId?: string; // Link to specific persona if applicable
-  content?: string; // Full transcript content
+  content?: string; // Transcript text
+  segments?: TranscriptSegment[]; // Structured Transcript Data
+  audioUrl?: string; // URL of the audio recording
+  videoUrl?: string; // For uploaded videos or Loom links
+  duration?: number; // Duration in seconds
+  speakers?: { id: string; name: string; role: 'interviewer' | 'participant' }[];
+  note?: Record<string, string>; // Live interview notes (BlockId -> Content)
+  hypothesisReviews?: Record<string, { // Key: Research Question Index (e.g. "0", "1")
+    status: 'supported' | 'refuted' | 'partial' | 'inconclusive' | 'pending';
+    comment: string;
+  }>;
 }
 
 // Duplicate Project interface removed. Use the one defined above.

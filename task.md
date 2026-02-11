@@ -1,0 +1,63 @@
+# Refactoring Code by Purpose
+
+- [x] Analyze `InterviewReport.tsx` for component extraction <!-- id: 1 -->
+- [x] Analyze `actions.ts` for domain grouping <!-- id: 2 -->
+- [x] Create `implementation_plan.md` for refactoring <!-- id: 3 -->
+- [x] **Refactor `InterviewReport.tsx`** <!-- id: 4 -->
+    - [x] Extract `TranscriptView` <!-- id: 5 -->
+    - [x] Extract `VideoView` <!-- id: 6 -->
+    - [x] Extract `MemoView` <!-- id: 7 -->
+    - [x] Update `InterviewReport.tsx` to use new components <!-- id: 8 -->
+- [x] **Refactor `actions.ts`** <!-- id: 9 -->
+    - [x] Create `src/app/actions/interview.ts` <!-- id: 10 -->
+    - [x] Create `src/app/actions/project.ts` <!-- id: 11 -->
+    - [x] Create `src/app/actions/simulation.ts` <!-- id: 12 -->
+    - [x] Create `src/app/actions/analysis.ts` <!-- id: 13 -->
+    - [x] Update `src/app/actions.ts` to re-export or migrate imports <!-- id: 14 -->
+- [x] Fix server action build error in `actions.ts` <!-- id: 16 -->
+- [x] Restore usability in `MemoTab` (sections/scripts) <!-- id: 18 -->
+- [x] Restore usability in `MemoTab` (sections/scripts) <!-- id: 18 -->
+- [x] Improve `TranscriptTab` design (Interviewer Right, Timestamps) <!-- id: 19 -->
+- [x] Fix runtime error in `actions/analysis.ts` (discussionGuide mismatch) <!-- id: 21 -->
+- [x] Verify analysis flow and transcript design <!-- id: 22 -->
+- [x] Refine `TranscriptTab`: Clickable timestamp tags inside bubbles <!-- id: 25 -->
+- [x] Refine `MemoTab`: Improve script block readability (remove italics) <!-- id: 26 -->
+- [x] Verify UX changes <!-- id: 27 -->
+- [ ] **Refactor Transcription Pipeline** <!-- id: 28 -->
+    - [x] Update `types.ts` to include `segments` in `RealInterview` <!-- id: 29 -->
+    - [x] Create `safeParseJSON` utility in `transcript-parser.ts` <!-- id: 33 -->
+    - [x] Update `actions/interview.ts` to use `safeParseJSON` and log validation <!-- id: 31 -->
+    - [x] Create `safeParseJSON` utility in `transcript-parser.ts` <!-- id: 33 -->
+    - [x] Update `actions/interview.ts` to use `safeParseJSON` and log validation <!-- id: 31 -->
+    - [x] Update `TranscriptTab.tsx` to render using `segments` <!-- id: 32 -->
+- [x] **Data-Dependent UI Refinement** <!-- id: 34 -->
+    - [x] Disable right panel tabs/buttons when content is missing in `InterviewReport.tsx` <!-- id: 35 -->
+- [ ] **Bug Fixes: Persona & Memo** <!-- id: 38 -->
+    - [x] Fix Persona deletion not working <!-- id: 39 -->
+    - [x] Fix Memo Question editing not updating content <!-- id: 40 -->
+    - [x] Fix Persona-Interview link count mismatch <!-- id: 41 -->
+- [ ] **Weekly Report Fixes** <!-- id: 42 -->
+    - [x] Debug Report Generation Failure (Silent fail) <!-- id: 43 -->
+    - [x] Implement Report Deletion <!-- id: 44 -->
+- [x] **Data Display & Sync Fixes** <!-- id: 45 -->
+    - [x] Show Interview Date in Report Creation List <!-- id: 46 -->
+    - [x] Fix Interview Header Date not updating <!-- id: 47 -->
+    - [x] Fix Linked Interview Count (0) when navigating from Interview Page <!-- id: 48 -->
+- [x] **Weekly Report Quality Improvements** <!-- id: 49 -->
+    - [x] Pass Research Questions to Report Generator <!-- id: 50 -->
+    - [x] Update LLM Prompt to focus on Hypothesis Verification & Evidence Quotes <!-- id: 51 -->
+- [x] **Report Refinement (Feedback)** <!-- id: 52 -->
+    - [x] Nuance Verification Status (Avoid binary result) <!-- id: 53 -->
+    - [x] Improve Quote Formatting (No italics, better line breaks) <!-- id: 54 -->
+- [x] **Formatting Correction** <!-- id: 55 -->
+    - [x] Use Blockquote (>) with Line Breaks, No Summarization <!-- id: 56 -->
+- [x] **Feature Request** <!-- id: 57 -->
+    - [x] Allow Renaming of Weekly Reports <!-- id: 58 -->
+- [x] **Fixes & Polish** <!-- id: 59 -->
+    - [x] Fix Report Generation Failure (Fallback to Flash model) <!-- id: 60 -->
+        - Reduced context size to 10k chars/interview
+        - Added detailed error logging
+        - Refactored prompt construction & Lowered Temperature (0.3) to fix hallucinations
+        - [x] Reverted to clean code structure per user request <!-- id: 62 -->
+        - [x] Applied structural fix `[{ text: prompt }]` for 'not iterable' error <!-- id: 63 -->
+    - [x] Polish Report Rename UI <!-- id: 61 -->

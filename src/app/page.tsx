@@ -1,80 +1,53 @@
 import { getAllProjects } from '@/lib/store/projects';
 import Link from 'next/link';
 import DeleteProjectButton from '@/components/DeleteProjectButton';
+import ProjectList from '@/components/ProjectList';
 
 export default async function Home() {
   const projects = await getAllProjects();
 
   return (
-    <main className="min-h-screen bg-slate-50 p-8">
-      <header className="mb-12 flex justify-between items-center">
-        <div>
-          <h1 className="text-4xl font-bold text-slate-900 tracking-tight">UX Research System</h1>
-          <p className="text-slate-600 mt-2">Manage your research projects, hypotheses, and insights.</p>
+    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900">
+      {/* Header / Navigation Bar */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-brand-200">
+              I
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-800">
+              INVAIZ <span className="text-brand-600">UX Research</span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-6">
+            <nav className="flex items-center gap-1">
+              <Link href="/" className="px-4 py-2 text-brand-600 bg-brand-50 rounded-lg font-bold text-sm">
+                Projects
+              </Link>
+              <Link href="/archive/transcripts" className="px-4 py-2 text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-lg font-medium text-sm transition">
+                Archive
+              </Link>
+            </nav>
+          </div>
         </div>
-        <Link
-          href="/projects/new"
-          className="bg-brand-600 hover:bg-brand-700 text-white px-6 py-3 rounded-xl font-medium shadow-md transition"
-        >
-          + New Project
-        </Link>
       </header>
 
-      <section>
-        <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-          Recent Projects
-        </h2>
+      {/* Main Content Area */}
+      <main className="max-w-6xl mx-auto p-8 md:p-12">
+        {/* Hero Section */}
+        <header className="mb-16">
+          <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 to-indigo-600">더 빠르고 정확하게 검증하세요</span>
+          </h2>
+          <p className="text-slate-500 mt-4 text-lg max-w-2xl leading-relaxed break-keep">
+            연구 설계부터 페르소나 시뮬레이션, 인사이트 분석까지.<br className="hidden md:block" />
+            AI와 함께 리서치 업무의 효율을 높이고 의미 있는 발견에 집중하세요.
+          </p>
+        </header>
 
-        {projects.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300">
-            <p className="text-slate-500">No projects yet. Start by creating one!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <Link key={project.id} href={`/projects/${project.id}`}>
-                <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition border border-slate-100 flex flex-col justify-between h-56 group relative">
-                  <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex gap-2 items-center">
-                        <span className={`text-xs font-bold uppercase tracking-wide px-2 py-1 rounded ${project.status === 'planning' ? 'bg-yellow-100 text-yellow-700' :
-                          project.status === 'simulation' ? 'bg-purple-100 text-purple-700' :
-                            project.status === 'execution' ? 'bg-green-100 text-green-700' :
-                              'bg-slate-100 text-slate-700'
-                          }`}>
-                          {project.status}
-                        </span>
-                        <DeleteProjectButton projectId={project.id} />
-                      </div>
-                      <span className="text-xs text-slate-400">
-                        {new Date(project.updatedAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-800 group-hover:text-brand-600 transition mb-2">
-                      {project.title}
-                    </h3>
-                    <p className="text-slate-600 text-sm line-clamp-3">
-                      {project.description}
-                    </p>
-                  </div>
-                  <div className="text-brand-600 text-sm font-medium mt-auto pt-4 flex items-center">
-                    Open Dashboard &rarr;
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="mt-20 pt-10 border-t border-slate-200">
-        <h2 className="text-lg font-semibold text-slate-400 mb-4">Resources</h2>
-        <div className="flex gap-4">
-          <Link href="/archive/transcripts" className="text-slate-600 hover:text-slate-900 underline underline-offset-4">
-            Browse Podcast Data Archive
-          </Link>
-        </div>
-      </section>
-    </main>
+        {/* Projects Section */}
+        <ProjectList projects={projects} />
+      </main>
+    </div>
   );
 }

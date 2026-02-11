@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Persona, GuideBlock, SimulationSession } from '@/lib/types';
+import { Persona, GuideBlock, SimulationSession, StructuredInsight } from '@/lib/types';
 import { chatWithPersonaAction, saveSimulationAction, analyzeMessagesAction } from '@/app/actions';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { formatDate } from '@/lib/date-utils';
 
 
 interface Message {
@@ -35,8 +36,11 @@ export function SimulationChat({ projectId, studyId, personas, guide, initialSes
     const [askedQuestionIds, setAskedQuestionIds] = useState<Set<string>>(new Set());
 
     // Analysis State
-    const [showAnalysis, setShowAnalysis] = useState(!!initialSession?.insights);
-    const [analysisResult, setAnalysisResult] = useState<string>(initialSession?.insights || '');
+    const [showAnalysis, setShowAnalysis] = useState(!!initialSession?.insights || !!initialSession?.structuredData);
+    const [analysisResult, setAnalysisResult] = useState<{ summary?: string, insights: StructuredInsight[] } | null>(
+        initialSession?.structuredData ? { summary: initialSession.summary, insights: initialSession.structuredData } : null
+    );
+    const [markdownAnalysis, setMarkdownAnalysis] = useState<string>(initialSession?.insights || '');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -124,13 +128,13 @@ export function SimulationChat({ projectId, studyId, personas, guide, initialSes
         try {
             const history = messages.map(m => ({
                 role: m.role,
-                content: m.text
+                text: m.text
             }));
             const result = await analyzeMessagesAction(projectId, studyId, history);
-            setAnalysisResult(result || "No insights generated.");
+            setAnalysisResult(result);
         } catch (e) {
             console.error(e);
-            setAnalysisResult("Error generating analysis.");
+            alert("Error generating analysis.");
         } finally {
             setIsAnalyzing(false);
         }
@@ -147,7 +151,9 @@ export function SimulationChat({ projectId, studyId, personas, guide, initialSes
                 personaId: activePersona.id,
                 createdAt: initialSession?.createdAt || new Date().toISOString(),
                 messages: messages,
-                insights: analysisResult || undefined
+                insights: markdownAnalysis || undefined,
+                summary: analysisResult?.summary,
+                structuredData: analysisResult?.insights
             });
 
             if (!activeSessionId) {
@@ -217,7 +223,7 @@ export function SimulationChat({ projectId, studyId, personas, guide, initialSes
     const handleExport = () => {
         if (!activePersona) return;
 
-        const date = new Date().toLocaleDateString();
+        const date = formatDate(new Date());
         const header = `[Persona Interview Export]\nDate: ${date}\nProject: ${projectId}\n\n`;
 
         const personaDetails = `[Persona Profile]\nName: ${activePersona.name}\nRole: ${activePersona.role}\nCompany: ${activePersona.company}\nBackground: ${activePersona.background}\n\nTraits:\n- Comm Style: ${activePersona.behavioral.communicationStyle}\n- Decision Making: ${activePersona.behavioral.decisionMakingProcess}\n- MBTI: ${activePersona.mbti || 'N/A'}\n\n`;
@@ -272,6 +278,19 @@ export function SimulationChat({ projectId, studyId, personas, guide, initialSes
                     {guide.map((block, i) => {
                         const isAsked = askedQuestionIds.has(block.id);
                         const isScript = block.type === 'script';
+                        const isSection = block.type === 'section';
+
+                        if (isSection) {
+                            return (
+                                <div
+                                    key={block.id}
+                                    className="w-full text-xs p-2 mt-4 first:mt-0 font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 flex items-center gap-2"
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    {block.content}
+                                </div>
+                            );
+                        }
 
                         return (
                             <button
@@ -437,26 +456,72 @@ export function SimulationChat({ projectId, studyId, personas, guide, initialSes
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-5 relative">
-                        {analysisResult && !isAnalyzing && (
-                            <button
-                                onClick={() => {
-                                    navigator.clipboard.writeText(analysisResult);
-                                    alert('Analysis copied to clipboard!');
-                                }}
-                                className="absolute top-2 right-2 text-xs bg-white border border-slate-200 px-2 py-1 rounded shadow-sm hover:bg-slate-50 text-slate-500 z-10"
-                            >
-                                📋 Copy
-                            </button>
-                        )}
-
                         {isAnalyzing ? (
                             <div className="flex flex-col items-center justify-center h-40 text-brand-400 gap-2">
                                 <div className="w-6 h-6 border-2 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
                                 <span className="text-xs">Analyzing conversation...</span>
                             </div>
                         ) : analysisResult ? (
+                            <div className="space-y-6">
+                                {analysisResult.summary && (
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Summary</h4>
+                                        <div className="prose prose-sm prose-slate max-w-none text-slate-700">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{analysisResult.summary}</ReactMarkdown>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    {(() => {
+                                        const grouped: Record<string, StructuredInsight[]> = {};
+                                        analysisResult.insights.forEach(f => {
+                                            const rq = f.researchQuestion || 'General';
+                                            if (!grouped[rq]) grouped[rq] = [];
+                                            grouped[rq].push(f);
+                                        });
+
+                                        return Object.entries(grouped).map(([rq, items], idx) => (
+                                            <div key={idx} className="space-y-2">
+                                                <div className="text-[10px] font-black text-brand-600 uppercase tracking-widest breadcrumb-divider flex items-center gap-2">
+                                                    <div className="h-px bg-brand-100 flex-1"></div>
+                                                    <span>{rq}</span>
+                                                    <div className="h-px bg-brand-100 flex-1"></div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {items.map(item => (
+                                                        <div key={item.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm hover:border-brand-200 transition-colors">
+                                                            <div className="flex gap-2">
+                                                                <div className={`w-1 rounded-full flex-shrink-0 ${item.type === 'insight' ? 'bg-brand-500' :
+                                                                    item.type === 'action' ? 'bg-emerald-500' : 'bg-slate-300'
+                                                                    }`}></div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="text-sm font-bold text-slate-800 leading-snug">
+                                                                        {item.content}
+                                                                    </div>
+                                                                    {item.meaning && (
+                                                                        <div className="text-xs text-slate-500 mt-1 pl-2 border-l-2 border-slate-50">
+                                                                            {item.meaning}
+                                                                        </div>
+                                                                    )}
+                                                                    {item.recommendation && (
+                                                                        <div className="text-xs text-emerald-600 mt-2 font-medium bg-emerald-50 p-2 rounded">
+                                                                            💡 {item.recommendation}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+                            </div>
+                        ) : markdownAnalysis ? (
                             <div className="prose prose-sm prose-slate max-w-none">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{analysisResult}</ReactMarkdown>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownAnalysis}</ReactMarkdown>
                             </div>
                         ) : (
                             <div className="text-center text-slate-400 text-sm mt-10 p-4">

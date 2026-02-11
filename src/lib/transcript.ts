@@ -79,6 +79,7 @@ export const parseTranscriptContent = (rawContent: string, title: string): Trans
     return {
         id: title, // Use title as ID for now or caller handles it
         title,
+        headers: [],
         segments,
         rawContent
     };
