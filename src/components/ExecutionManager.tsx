@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useId } from 'react';
+import { formatDate } from '@/lib/date-utils';
+
+
 import { uploadTranscriptAction, deleteInterviewAction, updateInterviewMetadataAction, createPersonaFromInterviewAction, updateInterviewTitleAction, uploadInterviewVideoAction, uploadInterviewAudioAction, updateStudySessionsOrderAction, linkPersonaToInterviewAction } from '@/app/actions';
 import { RealInterview, StructuredInsight } from '@/lib/types';
 import Link from 'next/link';
@@ -659,7 +662,7 @@ function SortableRow({
                         }}
                     >
                         <div className="font-bold text-slate-700 block">
-                            {interview.date}
+                            {formatDate(interview.date)}
                         </div>
                         <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
                             <span>🕒 {interview.startTime || '--:--'} ~ {interview.endTime || '--:--'}</span>
