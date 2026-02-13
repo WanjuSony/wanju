@@ -235,6 +235,7 @@ export async function uploadInterviewTranscriptAction(projectId: string, studyId
     const transcript = parseTranscriptContent(content, file.name);
 
     interview.content = transcript.rawContent;
+    interview.segments = transcript.segments;
     // interview.summary = ''; // Do not overwrite summary if not available
     interview.transcriptId = file.name;
 
@@ -360,6 +361,7 @@ export async function uploadLiveInterviewAction(projectId: string, studyId: stri
         structuredData: [],
         summary: 'Live interview recording.',
         content: '',
+        segments: [],
         audioUrl: savedAudioUrl,
         participantId: participantId === 'new' ? undefined : participantId,
         note: notes
