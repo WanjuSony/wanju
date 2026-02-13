@@ -48,23 +48,33 @@ export async function addInterviewAction(projectId: string, studyId: string, fil
     const studyIndex = data.studies.findIndex(s => s.id === studyId);
     if (studyIndex === -1) return;
 
-    const newInterview: RealInterview = {
-        id: Date.now().toString(),
-        projectId,
-        studyId,
-        transcriptId: filename,
+    // Surgical Insert
+    const newInterviewId = Date.now().toString();
+    const { error } = await supabase.from('interviews').insert({
+        id: newInterviewId,
+        project_id: projectId,
+        study_id: studyId,
         title: filename,
+        transcript_id: filename,
         date: new Date().toISOString().split('T')[0],
-        startTime: '10:00',
-        endTime: '11:00',
-        structuredData: [],
+        start_time: '10:00',
+        end_time: '11:00',
+        transcript: transcript.rawContent,
+        segments: transcript.segments,
         summary: '',
-        content: transcript.rawContent,
-        note: {}
-    };
+        notes: {},
+        participants: []
+    });
 
-    data.studies[studyIndex].sessions.push(newInterview);
-    await saveProjectData(data);
+    if (error) {
+        console.error("Failed to insert interview:", error);
+        return;
+    }
+
+    // Update study status to 'fieldwork' if needed
+    if (data.studies[studyIndex].status === 'planning') {
+        await supabase.from('studies').update({ status: 'fieldwork' }).eq('id', studyId);
+    }
 
     revalidatePath(`/projects/${projectId}/studies/${studyId}`);
 }
@@ -78,23 +88,29 @@ export async function addInterviewFromContentAction(projectId: string, studyId: 
     const studyIndex = data.studies.findIndex(s => s.id === studyId);
     if (studyIndex === -1) throw new Error("Study not found");
 
-    const newInterview: RealInterview = {
-        id: Date.now().toString(),
-        projectId,
-        studyId,
-        transcriptId: filename,
+    // Surgical Insert
+    const newInterviewId = Date.now().toString();
+    const { error } = await supabase.from('interviews').insert({
+        id: newInterviewId,
+        project_id: projectId,
+        study_id: studyId,
         title: filename,
+        transcript_id: filename,
         date: new Date().toISOString().split('T')[0],
-        startTime: '10:00',
-        endTime: '11:00',
-        structuredData: [],
+        start_time: '10:00',
+        end_time: '11:00',
+        transcript: transcript.rawContent,
+        segments: transcript.segments,
         summary: '',
-        content: transcript.rawContent,
-        note: {}
-    };
+        notes: {},
+        participants: []
+    });
 
-    data.studies[studyIndex].sessions.push(newInterview);
-    await saveProjectData(data);
+    if (error) throw new Error(`Failed to insert interview: ${error.message}`);
+
+    if (data.studies[studyIndex].status === 'planning') {
+        await supabase.from('studies').update({ status: 'fieldwork' }).eq('id', studyId);
+    }
 
     revalidatePath(`/projects/${projectId}/studies/${studyId}`);
 }
@@ -234,12 +250,13 @@ export async function uploadInterviewTranscriptAction(projectId: string, studyId
     const content = await extractContent(file);
     const transcript = parseTranscriptContent(content, file.name);
 
-    interview.content = transcript.rawContent;
-    interview.segments = transcript.segments;
-    // interview.summary = ''; // Do not overwrite summary if not available
-    interview.transcriptId = file.name;
+    // Surgical Update for Reliability
+    await supabase.from('interviews').update({
+        transcript: transcript.rawContent,
+        segments: transcript.segments,
+        transcript_id: file.name
+    }).eq('id', interviewId);
 
-    await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
     return await getInterview(interviewId);
 }
@@ -266,9 +283,13 @@ export async function uploadInterviewAudioAction(projectId: string, studyId: str
     }
 
     const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
-    interview.audioUrl = publicUrlData.publicUrl;
+    // Surgical Update for Reliability
+    // We update recording_url. Note: Our system uses one URL field for both audio/video in many places, 
+    // but the DB column is 'recording_url'. 
+    await supabase.from('interviews').update({
+        recording_url: publicUrlData.publicUrl
+    }).eq('id', interviewId);
 
-    await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
     return await getInterview(interviewId);
 }
@@ -295,9 +316,11 @@ export async function uploadInterviewVideoAction(projectId: string, studyId: str
     }
 
     const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
-    interview.videoUrl = publicUrlData.publicUrl;
+    // Surgical Update
+    await supabase.from('interviews').update({
+        recording_url: publicUrlData.publicUrl
+    }).eq('id', interviewId);
 
-    await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
     return await getInterview(interviewId);
 }
@@ -386,8 +409,11 @@ export async function saveInterviewVideoUrlAction(projectId: string, studyId: st
     const interview = study?.sessions.find(i => i.id === interviewId);
     if (!interview) return;
 
-    interview.videoUrl = url;
-    await saveProjectData(data);
+    // Surgical Update
+    await supabase.from('interviews').update({
+        recording_url: url
+    }).eq('id', interviewId);
+
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
     return await getInterview(interviewId);
 }
