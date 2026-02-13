@@ -69,6 +69,7 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
         /^\d{4}년/,         // Year start like "2026년"
         /^\d{2}\.\d{2}\.\d{2}/, // Date dot format
         /^\d+분 \d+초/,     // Duration format "31분 43초"
+        /^\d+시간/,         // Duration start with hour
         /^\d{1,2}:\d{2}$/,  // Just a time like "7:03"
         /^녹음녹화/          // Recording label
     ];

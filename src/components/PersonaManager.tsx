@@ -14,6 +14,7 @@ interface Props {
 
 export function PersonaManager({ projectId, personas, interviews, studies }: Props) {
     const [isAdding, setIsAdding] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
     const [filter, setFilter] = useState<'all' | 'ai' | 'real'>('all');
 
@@ -91,8 +92,17 @@ export function PersonaManager({ projectId, personas, interviews, studies }: Pro
                         </p>
 
                         <form action={async (formData) => {
-                            await createAIGeneratedPersonaAction(projectId, formData);
-                            setIsAdding(false);
+                            if (isGenerating) return;
+                            setIsGenerating(true);
+                            try {
+                                await createAIGeneratedPersonaAction(projectId, formData);
+                                setIsAdding(false);
+                            } catch (e) {
+                                console.error(e);
+                                alert("Failed to generate persona.");
+                            } finally {
+                                setIsGenerating(false);
+                            }
                         }} className="space-y-6">
                             <div>
                                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Target Role / Job Title</label>
@@ -102,6 +112,7 @@ export function PersonaManager({ projectId, personas, interviews, studies }: Pro
                                     className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 ring-brand-500 outline-none bg-slate-50/50 transition-all"
                                     placeholder="e.g. Account Manager, UX Designer, Power User..."
                                     autoFocus
+                                    disabled={isGenerating}
                                 />
                             </div>
                             <div>
@@ -111,13 +122,24 @@ export function PersonaManager({ projectId, personas, interviews, studies }: Pro
                                     name="file"
                                     accept=".pdf,.docx,.txt"
                                     className="w-full text-sm text-slate-500 font-medium file:mr-4 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:text-[11px] file:font-black file:uppercase file:tracking-widest file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 transition-all cursor-pointer"
+                                    disabled={isGenerating}
                                 />
                                 <p className="text-xs text-slate-400 mt-3 italic font-medium">Uploading transcripts or research papers helps AI generate more accurate personas.</p>
                             </div>
                             <div className="flex justify-end gap-4 pt-6">
-                                <button type="button" onClick={() => setIsAdding(false)} className="px-6 py-3 text-slate-400 font-black text-sm hover:text-slate-600 transition-colors uppercase tracking-widest">Cancel</button>
-                                <button type="submit" className="px-8 py-3 bg-brand-600 text-white text-sm font-black rounded-2xl hover:bg-brand-700 shadow-xl shadow-brand-100 transition-all hover:scale-[1.05]">
-                                    Generate via AI
+                                <button type="button" onClick={() => setIsAdding(false)} disabled={isGenerating} className="px-6 py-3 text-slate-400 font-black text-sm hover:text-slate-600 transition-colors uppercase tracking-widest">Cancel</button>
+                                <button type="submit" disabled={isGenerating} className={`px-8 py-3 bg-brand-600 text-white text-sm font-black rounded-2xl hover:bg-brand-700 shadow-xl shadow-brand-100 transition-all hover:scale-[1.05] flex items-center gap-2 ${isGenerating ? 'opacity-70 cursor-wait' : ''}`}>
+                                    {isGenerating ? (
+                                        <>
+                                            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Generating...
+                                        </>
+                                    ) : (
+                                        'Generate via AI'
+                                    )}
                                 </button>
                             </div>
                         </form>

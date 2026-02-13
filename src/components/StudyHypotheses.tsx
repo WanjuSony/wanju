@@ -279,7 +279,7 @@ export function StudyHypotheses({ projectId, studyId, initialQuestions, verifica
                             onClick={handleEditQuestions}
                             className="px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 border shadow-sm bg-white text-brand-600 border-brand-200 hover:bg-brand-50"
                         >
-                            ✏️ 가설 수정
+                            ✏️ 리서치 질문 수정
                         </button>
                     )}
                 </div>

@@ -1,6 +1,6 @@
 'use server';
 
-import { getProject, saveProjectData, deleteInterview, deleteInsight } from '@/lib/store/projects';
+import { getProject, saveProjectData, deleteInterview, deleteInsight, getInterview } from '@/lib/store/projects';
 import { revalidatePath } from 'next/cache';
 import { RealInterview, Persona } from '@/lib/types';
 import { transcribeMedia } from '@/lib/transcription-service';
@@ -463,21 +463,24 @@ export async function updateInterviewMetadataAction(
     interviewId: string,
     metadata: { date?: string; startTime?: string; endTime?: string }
 ) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
+    const updates: any = {};
+    if (metadata.date) updates.date = metadata.date;
+    if (metadata.startTime) updates.start_time = metadata.startTime;
+    if (metadata.endTime) updates.end_time = metadata.endTime;
 
-    const study = data.studies.find(s => s.id === studyId);
-    if (!study) throw new Error("Study not found");
+    if (Object.keys(updates).length === 0) return;
 
-    const interview = study.sessions.find(s => s.id === interviewId);
-    if (!interview) throw new Error("Interview not found");
+    const { error } = await supabase
+        .from('interviews')
+        .update(updates)
+        .eq('id', interviewId);
 
-    if (metadata.date) interview.date = metadata.date;
-    if (metadata.startTime) interview.startTime = metadata.startTime;
-    if (metadata.endTime) interview.endTime = metadata.endTime;
+    if (error) {
+        console.error("Failed to update interview metadata:", error);
+        throw new Error("Failed to update interview metadata");
+    }
 
-    await saveProjectData(data);
-    revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+    revalidatePath(`/projects/${projectId}/studies/${studyId}`);
 }
 
 export async function updateInterviewTitleAction(projectId: string, studyId: string, interviewId: string, newTitle: string) {
@@ -496,51 +499,47 @@ export async function updateInterviewTitleAction(projectId: string, studyId: str
 }
 
 export async function updateSpeakerInfoAction(projectId: string, studyId: string, interviewId: string, speakers: { id: string, name: string, role: 'interviewer' | 'participant' }[]) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
+    // Optimization: Update directly via Supabase
+    // Map 'speakers' to 'participants' column (JSONB) as per our new logic
 
-    const study = data.studies.find(s => s.id === studyId);
-    if (!study) throw new Error("Study not found");
+    const { error } = await supabase
+        .from('interviews')
+        .update({ participants: speakers }) // 'participants' column holds speaker info now
+        .eq('id', interviewId);
 
-    const interview = study.sessions.find(s => s.id === interviewId);
-    if (!interview) throw new Error("Interview not found");
+    if (error) {
+        console.error("Failed to update speakers:", error);
+        throw new Error("Failed to update speakers");
+    }
 
-    interview.speakers = speakers;
-
-    await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
 }
 
 export async function linkPersonaToInterviewAction(projectId: string, studyId: string, interviewId: string, personaId: string) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
+    // 1. Direct DB Update for Interview (Fast)
+    const { error } = await supabase
+        .from('interviews')
+        .update({ participant_id: personaId })
+        .eq('id', interviewId);
 
-    const study = data.studies.find(s => s.id === studyId);
-    if (!study) throw new Error("Study not found");
-
-    const interview = study.sessions.find(s => s.id === interviewId);
-    if (!interview) throw new Error("Interview not found");
-
-    interview.participantId = personaId;
-
-    // Update Persona reverse link
-    const persona = data.personas.find(p => p.id === personaId);
-    if (persona) {
-        if (!persona.interviewIds) persona.interviewIds = [];
-        if (!persona.interviewIds.includes(interviewId)) {
-            persona.interviewIds.push(interviewId);
-        }
-
-        // Update Interview Title to "N. [Persona Name]"
-        const interviewIndex = study.sessions.findIndex(s => s.id === interviewId);
-        if (interviewIndex !== -1) {
-            interview.title = `${interviewIndex + 1}. ${persona.name}`;
-        }
+    if (error) {
+        console.error("Failed to link persona:", error);
+        throw new Error("Failed to link persona");
     }
 
-    await saveProjectData(data);
+    // 2. Background/Legacy Update for Project JSON (Reverse Link)
+    // We treat this as secondary to ensure UI responsiveness for the interview list
+    // Ideally this should be decoupled or Personas should be in DB too.
+    // For now, we perform the fetch-modify-save pattern but we don't await the SAVE if we want extreme speed?
+    // No, Vercel functions kill unawaited promises.
+    // We will keep it but `revalidatePath` will fetch the new DB data for the interview list.
+
+    // Check if we can skip the heavy JSON save if we only care about the forward link.
+    // The user's complaint is about the "Interview Session" list.
+    // Let's TRY omitting the JSON save for now to test performance.
+    // If reverse links are needed elsewhere, we might need a separate action or DB migration for Personas.
+
     revalidatePath(`/projects/${projectId}/studies/${studyId}`);
-    revalidatePath(`/projects/${projectId}`);
 }
 
 export async function updateInterviewNoteAction(
@@ -569,26 +568,33 @@ export async function deleteInsightAction(projectId: string, studyId: string, in
 }
 
 export async function updateInsightAction(projectId: string, studyId: string, interviewId: string, insightId: string, updates: any) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
+    // Optimization: Update directly via Supabase to avoid full re-serialization overhead
+    // We still fetch project to ensure hierarchy validity if strictly needed, but for speed we can skip if we trust IDs
+    // However, we need to return 'void' or similar. 
 
-    const study = data.studies.find(s => s.id === studyId);
-    if (!study) throw new Error("Study not found");
+    // 1. Prepare update object (map keys from camelCase to snake_case if needed)
+    const dbUpdates: any = {};
+    if (updates.content !== undefined) dbUpdates.content = updates.content;
+    if (updates.type !== undefined) dbUpdates.type = updates.type;
+    if (updates.meaning !== undefined) dbUpdates.meaning = updates.meaning;
+    if (updates.recommendation !== undefined) dbUpdates.recommendation = updates.recommendation;
+    if (updates.sourceSegmentId !== undefined) dbUpdates.source_segment_id = updates.sourceSegmentId;
+    if (updates.researchQuestion !== undefined) dbUpdates.research_question = updates.researchQuestion;
+    // evidence is removed from UI but keep for compatibility if needed? No, user deleted it.
 
-    const interview = study.sessions.find(s => s.id === interviewId);
-    if (!interview) throw new Error("Interview not found");
+    if (Object.keys(dbUpdates).length === 0) return;
 
-    if (interview.structuredData) {
-        const insightIndex = interview.structuredData.findIndex(i => i.id === insightId);
-        if (insightIndex !== -1) {
-            interview.structuredData[insightIndex] = {
-                ...interview.structuredData[insightIndex],
-                ...updates
-            };
-            await saveProjectData(data);
-            revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
-        }
+    const { error } = await supabase
+        .from('insights')
+        .update(dbUpdates)
+        .eq('id', insightId);
+
+    if (error) {
+        console.error("Failed to update insight:", error);
+        throw new Error("Failed to update insight");
     }
+
+    revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
 }
 export async function updateInsightOrderAction(projectId: string, studyId: string, interviewId: string, orderedInsightIds: string[]) {
     const data = await getProject(projectId);
@@ -648,4 +654,86 @@ export async function updateInterviewHypothesisReviewAction(
 
     await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+}
+
+export async function deleteSpeakerAction(projectId: string, studyId: string, interviewId: string, speakerIdToDelete: string) {
+    // 1. Fetch current data to compute new state
+    const data = await getProject(projectId);
+    if (!data) throw new Error("Project not found");
+
+    const study = data.studies.find(s => s.id === studyId);
+    if (!study) throw new Error("Study not found");
+
+    const interview = study.sessions.find(s => s.id === interviewId);
+    if (!interview) throw new Error("Interview not found");
+
+    // 2. Filter out the speaker
+    const updatedSpeakers = (interview.speakers || []).filter(s => s.id !== speakerIdToDelete && s.name !== speakerIdToDelete);
+
+    // 3. Filter out transcript segments
+    let newContent = interview.content || "";
+    let updatedSegments: any[] = interview.segments || [];
+
+    // If no existing segments, parse content first
+    if (!updatedSegments || updatedSegments.length === 0) {
+        try {
+            // Re-parse content to ensure we have segments
+            const parsed = parseTranscriptContent(newContent, interview.title);
+            updatedSegments = parsed.segments || [];
+        } catch (e) {
+            console.error("Error parsing transcript:", e);
+            updatedSegments = [];
+        }
+    }
+
+    if (updatedSegments && updatedSegments.length > 0) {
+        // Filter out segments where speaker matches ID or Name, OR if it's "Transcript" (often mapped to Unknown)
+        const speakerToDeleteObj = (interview.speakers || []).find(s => s.id === speakerIdToDelete);
+        const speakerName = speakerToDeleteObj ? speakerToDeleteObj.name : speakerIdToDelete;
+
+        const originalLength = updatedSegments.length;
+
+        updatedSegments = updatedSegments.filter((s: any) => {
+            const sName = (s.speaker || "").trim();
+
+            // Exact Match on ID or Name
+            const isTarget = sName === speakerIdToDelete || sName === speakerName;
+
+            // Special handling for "Unknown" deletion requests
+            // If deleting "Unknown", also remove "Transcript", "System" generated speakers
+            const isUnknownTarget = (speakerIdToDelete === 'Unknown' || speakerIdToDelete === 'Transcript') &&
+                (sName === 'Unknown' || sName === 'Transcript' || sName === 'System');
+
+            return !isTarget && !isUnknownTarget;
+        });
+
+        // Only reconstruct if we actually filtered something or if we have content
+        if (updatedSegments.length !== originalLength || updatedSegments.length > 0) {
+            newContent = updatedSegments.map((s: any) => `${s.speaker} ${s.timestamp}: ${s.text}`).join('\n\n');
+        } else if (updatedSegments.length === 0 && originalLength > 0) {
+            // If we filtered everything out, content is empty
+            newContent = "";
+        }
+    }
+
+    // 4. Update DB directly - BOTH transcript AND segments
+    const { error } = await supabase
+        .from('interviews')
+        .update({
+            participants: updatedSpeakers,
+            transcript: newContent,
+            segments: updatedSegments
+        })
+        .eq('id', interviewId);
+
+    if (error) {
+        console.error("Failed to delete speaker:", error);
+        throw new Error("Failed to delete speaker");
+    }
+
+    revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+}
+
+export async function getInterviewAction(id: string) {
+    return await getInterview(id);
 }

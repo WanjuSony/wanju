@@ -172,6 +172,7 @@ export interface ResearchStudy {
   discussionGuide: GuideBlock[]; // The list of questions for the interview
   changeLogs: ChangeLogEntry[];
   reports?: WeeklyReport[];
+  _insights?: { type: string; content: string }[]; // Internal property for AI context building
 }
 
 export interface StructuredInsight {
@@ -226,6 +227,8 @@ export interface RealInterview {
     status: 'supported' | 'refuted' | 'partial' | 'inconclusive' | 'pending';
     comment: string;
   }>;
+  segmentsJsonb?: any[]; // JSONB segments
+  sortOrder?: number;
 }
 
 // Duplicate Project interface removed. Use the one defined above.

@@ -12,6 +12,7 @@ interface Props {
 
 export function InsightCard({ item, onJump, onDelete, onUpdate, researchQuestions = [] }: Props) {
     const [isEditing, setIsEditing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false); // Add loading state
     const [editData, setEditData] = useState(() => {
         let mappedRQ = item.researchQuestion || '';
         const match = mappedRQ.match(/RQ\s?(\d+)/i);
@@ -21,10 +22,18 @@ export function InsightCard({ item, onJump, onDelete, onUpdate, researchQuestion
         return { ...item, researchQuestion: mappedRQ };
     });
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (onUpdate) {
-            onUpdate(item.id, editData);
-            setIsEditing(false);
+            setIsSaving(true);
+            try {
+                await onUpdate(item.id, editData); // Assuming onUpdate can be awaited (Server Actions return promise)
+                setIsEditing(false);
+            } catch (e) {
+                console.error("Save failed", e);
+                alert("저장에 실패했습니다.");
+            } finally {
+                setIsSaving(false);
+            }
         }
     };
 
@@ -75,12 +84,15 @@ export function InsightCard({ item, onJump, onDelete, onUpdate, researchQuestion
                         placeholder="Content"
                     />
 
+
+
                     {editData.type === 'insight' && (
                         <textarea
                             value={editData.meaning || ''}
                             onChange={e => setEditData({ ...editData, meaning: e.target.value })}
                             className="w-full text-xs p-2 rounded border border-slate-300 min-h-[40px]"
                             placeholder="의미 / 맥락 (Meaning)"
+                            disabled={isSaving}
                         />
                     )}
 
@@ -90,11 +102,34 @@ export function InsightCard({ item, onJump, onDelete, onUpdate, researchQuestion
                             onChange={e => setEditData({ ...editData, recommendation: e.target.value })}
                             className="w-full text-xs p-2 rounded border border-slate-300 min-h-[40px]"
                             placeholder="추천 (Recommendation)"
+                            disabled={isSaving}
                         />
                     )}
                     <div className="flex justify-end gap-2">
-                        <button onClick={() => setIsEditing(false)} className="text-xs px-3 py-1.5 rounded text-slate-500 hover:bg-slate-100">취소</button>
-                        <button onClick={handleSave} className="text-xs px-3 py-1.5 rounded bg-brand-600 text-white hover:bg-brand-700">저장</button>
+                        <button
+                            onClick={() => setIsEditing(false)}
+                            className="text-xs px-3 py-1.5 rounded text-slate-500 hover:bg-slate-100"
+                            disabled={isSaving}
+                        >
+                            취소
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className={`text-xs px-3 py-1.5 rounded text-white transition flex items-center gap-1 ${isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700'}`}
+                        >
+                            {isSaving ? (
+                                <>
+                                    <svg className="animate-spin h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    저장 중...
+                                </>
+                            ) : (
+                                '저장'
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -124,32 +159,6 @@ export function InsightCard({ item, onJump, onDelete, onUpdate, researchQuestion
                 item.type === 'action' ? 'bg-emerald-500' : 'bg-slate-300'
                 }`}></div>
             <div className="flex-1 min-w-0">
-                {item.source === 'user' && (
-                    <span className="absolute top-2 right-2 text-[10px] uppercase font-bold text-indigo-400 border border-indigo-100 px-1.5 rounded-full bg-indigo-50">User</span>
-                )}
-
-                {/* Evidence (Quote) Section */}
-                {item.evidence && (
-                    <div className="mb-3 bg-slate-50 border-l-2 border-slate-300 pl-3 py-2 rounded-r-lg">
-                        <p className="text-xs text-slate-600 italic font-medium mb-1">
-                            &ldquo;{item.evidence}&rdquo;
-                        </p>
-                        {item.sourceSegmentId && (
-                            <div className="flex flex-wrap gap-2 justify-end">
-                                {item.sourceSegmentId.split(',').map((ref, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => onJump(ref.trim())}
-                                        className="text-[10px] text-brand-600 font-bold hover:underline flex items-center gap-1"
-                                    >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                        {ref.trim()}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
 
                 <div className="prose prose-sm prose-slate max-w-none mb-1">
                     <ReactMarkdown>{item.content}</ReactMarkdown>
@@ -169,9 +178,9 @@ export function InsightCard({ item, onJump, onDelete, onUpdate, researchQuestion
                     </div>
                 )}
 
-                {/* Fallback timestamp if no evidence but has timestamp */}
-                {!item.evidence && item.sourceSegmentId && (
-                    <div className="flex flex-wrap gap-2 mt-2 justify-end">
+                {/* Timestamp always at bottom */}
+                {item.sourceSegmentId && (
+                    <div className="flex flex-wrap gap-2 mt-2 justify-start">
                         {item.sourceSegmentId.split(',').map((ref, idx) => (
                             <button
                                 key={idx}

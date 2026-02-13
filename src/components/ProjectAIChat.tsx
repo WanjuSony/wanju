@@ -53,7 +53,11 @@ export function ProjectAIChat({ project: initialProject, studies, personas }: Pr
         }
     }, [activeSessionId, project.chatSessions]);
 
+    const [isCreatingSession, setIsCreatingSession] = useState(false);
+
     const handleNewChat = async () => {
+        if (isCreatingSession) return;
+        setIsCreatingSession(true);
         try {
             const newSession = await createProjectChatSessionAction(project.id);
             setProject(prev => ({
@@ -63,6 +67,8 @@ export function ProjectAIChat({ project: initialProject, studies, personas }: Pr
             setActiveSessionId(newSession.id);
         } catch (error) {
             console.error('Failed to create chat session:', error);
+        } finally {
+            setIsCreatingSession(false);
         }
     };
 
@@ -241,9 +247,19 @@ export function ProjectAIChat({ project: initialProject, studies, personas }: Pr
                 <div className="p-6">
                     <button
                         onClick={handleNewChat}
-                        className="w-full bg-white border border-slate-200 hover:border-brand-500 hover:text-brand-600 text-slate-700 py-3 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-sm"
+                        disabled={isCreatingSession}
+                        className="w-full bg-white border border-slate-200 hover:border-brand-500 hover:text-brand-600 text-slate-700 py-3 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
                     >
-                        <span>+</span> 새 대화 시작하기
+                        {isCreatingSession ? (
+                            <>
+                                <span className="animate-spin text-brand-500">↻</span>
+                                <span className="text-brand-600">대화 생성 중...</span>
+                            </>
+                        ) : (
+                            <>
+                                <span>+</span> 새 대화 시작하기
+                            </>
+                        )}
                     </button>
                 </div>
 

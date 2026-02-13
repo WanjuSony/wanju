@@ -66,6 +66,8 @@ export function ManualInsightForm({ onCancel, onSubmit, researchQuestions = [] }
                 onChange={e => setFormData({ ...formData, content: e.target.value })}
                 className="w-full text-xs p-2 rounded border border-slate-300 min-h-[60px]"
             />
+
+
             {formData.type === 'insight' && (
                 <textarea
                     placeholder="의미 / 맥락 (왜 중요한가요?)"

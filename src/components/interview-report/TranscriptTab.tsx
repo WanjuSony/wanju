@@ -32,6 +32,7 @@ interface TranscriptTabProps {
     interviewerName?: string;
     setInterviewerName?: (name: string) => void;
     onStartTranscription?: () => void;
+    onDeleteSpeaker?: (speakerId: string) => void;
 }
 
 export function TranscriptTab({
@@ -62,7 +63,8 @@ export function TranscriptTab({
     setSpeakerCount,
     interviewerName,
     setInterviewerName,
-    onStartTranscription
+    onStartTranscription,
+    onDeleteSpeaker
 }: TranscriptTabProps) {
     const [showSpeakerSettings, setShowSpeakerSettings] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
@@ -240,7 +242,7 @@ export function TranscriptTab({
                             </div>
                             <div className="space-y-2">
                                 {speakers.map((s, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg border border-slate-100">
+                                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg border border-slate-100 group/speaker">
                                         <div className="w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-400 shadow-sm flex-shrink-0">
                                             {idx + 1}
                                         </div>
@@ -279,6 +281,21 @@ export function TranscriptTab({
                                                     </svg>
                                                 </div>
                                             </div>
+
+                                            {/* Delete Speaker Button (Only if > 2 speakers) */}
+                                            {speakers.length > 2 && onDeleteSpeaker && (
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm(`'${s.name}' 화자를 삭제하시겠습니까?\n이 화자의 모든 대화 내용이 함께 삭제됩니다.`)) {
+                                                            onDeleteSpeaker(s.id);
+                                                        }
+                                                    }}
+                                                    className="w-6 h-6 flex items-center justify-center rounded-md bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 transition opacity-0 group-hover/speaker:opacity-100"
+                                                    title="화자 삭제"
+                                                >
+                                                    ✕
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

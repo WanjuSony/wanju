@@ -70,9 +70,9 @@ export async function analyzeTranscript(transcript: Transcript, context?: Analys
             {
                 "type": "fact" | "insight" | "action",
                 "content": "Description of the finding",
-                "meaning": "Why this matters (optional, for insights)",
+                "meaning": "Why this matters / Context (REQUIRED). Explain the background or significance of this finding.",
                 "recommendation": "Actionable step (optional, for actions)",
-                "sourceSegmentId": "Timestamp (Example: '04:20'). STRICTLY MM:SS format. No words.",
+                "sourceSegmentId": "Best matching Timestamp (MM:SS). FIND THE CLOSEST MATCHING QUOTE. Do not leave empty.",
                 "researchQuestion": "The specific research question (RQ1, RQ2...) this insight answers. Categorize into the most relevant one from the list above. If it doesn't fit any, use 'General'."
             }
         ]
@@ -82,8 +82,9 @@ export async function analyzeTranscript(transcript: Transcript, context?: Analys
     1. Extract at least 5-10 distinct items.
     2. Prioritize "insight" and "action".
     3. **CRITICAL: RESPOND ONLY IN KOREAN (한국어). Do not output English.**
-    4. CITATION IS MANDATORY (Time or Quote).
-    5. **CRITICAL: sourceSegmentId MUST be 'MM:SS' format. Do NOT translate it (e.g. NOT '도입부').**
+    4. CITATION IS MANDATORY (Time or Quote). **Every insight MUST have a sourceSegmentId (MM:SS).**
+    5. **meaning (Why) is REQUIRED.** Don't just state the fact, explain *why* it is important to the user.
+    6. **CRITICAL: sourceSegmentId MUST be 'MM:SS' format. Do NOT translate it (e.g. NOT '도입부').**
 
     TRANSCRIPT:
     ${transcript.rawContent}
@@ -287,6 +288,16 @@ export async function generateSummary(transcript: Transcript, context?: Analysis
 }
 
 export async function generateInterviewerFeedback(transcript: Transcript, discussionGuide: string[], context?: AnalysisContext): Promise<string> {
+    // Safety Check
+    if (!transcript.rawContent || transcript.rawContent.length < 50 || transcript.rawContent.includes("(No Transcript Provided)")) {
+        return JSON.stringify({
+            score: 0,
+            overall_critique: "Transcript is too short or missing for meaningful feedback.",
+            strengths: [],
+            improvements: []
+        });
+    }
+
     const prompt = `
     You are a Senior UX Research Manager. Critique the Interviewer's performance.
     
@@ -307,7 +318,7 @@ export async function generateInterviewerFeedback(transcript: Transcript, discus
     **CRITICAL: Use EXACT timestamps (MM:SS) found in the transcript. Do NOT translate timestamps (e.g. NOT '도입부').**
     
     TRANSCRIPT:
-    ${transcript.rawContent.slice(0, 200000)}
+    ${transcript.rawContent.slice(0, 150000)}
     `;
 
     try {
@@ -321,14 +332,19 @@ export async function generateInterviewerFeedback(transcript: Transcript, discus
                 generationConfig: { responseMimeType: "application/json" }
             });
         });
-        return result.response.text();
+
+        // Return raw text, but ensure it looks like JSON if possible
+        const text = result.response.text();
+        if (!text || text.trim().length === 0) throw new Error("Empty response from AI");
+        return text;
 
     } catch (e: any) {
         console.warn("Gemini Feedback Failed, trying OpenAI...", e.message);
         try {
             return await callOpenAI(prompt, true);
         } catch (openaiErr: any) {
-            return `피드백 생성 실패 (OpenAI Fallback도 실패): ${openaiErr.message}`;
+            console.error("Feedback Generation Failed completely:", openaiErr);
+            throw new Error(`AI Analysis Failed: ${openaiErr.message || "Unknown error"}`);
         }
     }
 }

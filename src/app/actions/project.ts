@@ -9,6 +9,7 @@ import mammoth from 'mammoth';
 // @ts-ignore
 import pdf from 'pdf-parse/lib/pdf-parse.js';
 import { Buffer } from 'buffer';
+import { supabase } from '@/lib/supabase';
 
 async function extractContent(file: File): Promise<string> {
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -216,16 +217,21 @@ export async function updateStudyTitleAction(projectId: string, studyId: string,
 }
 
 export async function updateStudySessionsOrderAction(projectId: string, studyId: string, sessionIds: string[]) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
+    // Optimization: Update directly via Supabase to avoid full JSON re-serialization
+    // This makes reordering instant.
 
-    const study = data.studies.find(s => s.id === studyId);
-    if (!study) throw new Error("Study not found");
+    // Create an array of update promises
+    const updatePromises = sessionIds.map((id, index) =>
+        supabase
+            .from('interviews')
+            .update({ sort_order: index })
+            .eq('id', id)
+    );
 
-    const reordered = sessionIds.map(id => study.sessions.find(s => s.id === id)).filter(Boolean) as RealInterview[];
-    study.sessions = reordered;
+    // Execute all updates in parallel
+    await Promise.all(updatePromises);
 
-    await saveProjectData(data);
+    revalidatePath(`/projects/${projectId}/studies/${studyId}`);
 }
 
 export async function updateSimulationSessionsOrderAction(projectId: string, studyId: string, simulationIds: string[]) {
@@ -258,36 +264,40 @@ export async function updateStudyStatusAction(projectId: string, studyId: string
 }
 
 export async function createProjectChatSessionAction(projectId: string) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
-
-    if (!data.project.chatSessions) {
-        data.project.chatSessions = [];
-    }
-
+    const newSessionId = Date.now().toString();
     const newSession = {
-        id: Date.now().toString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        messages: [{ role: 'model', text: '안녕하세요! 프로젝트의 진행 상황, 목표 달성 여부, 다음 단계에 대해 무엇이든 물어보세요. 제가 도와드릴게요. 😊' }] as { role: 'user' | 'model', text: string }[]
+        id: newSessionId,
+        project_id: projectId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        messages: [{ role: 'model', text: '안녕하세요! 프로젝트의 진행 상황, 목표 달성 여부, 다음 단계에 대해 무엇이든 물어보세요. 제가 도와드릴게요. 😊' }],
+        selected_context_ids: []
     };
 
-    data.project.chatSessions.push(newSession);
+    const { error } = await supabase
+        .from('chat_sessions')
+        .insert(newSession);
 
-    await saveProjectData(data);
-    revalidatePath(`/projects/${projectId}`);
-    return newSession;
+    if (error) throw error;
+    // Removed revalidatePath for instant response. UI handles local state update.
+    return {
+        id: newSession.id,
+        createdAt: newSession.created_at,
+        updatedAt: newSession.updated_at,
+        messages: newSession.messages as any[],
+        selectedContextIds: []
+    };
 }
 
 export async function deleteProjectChatSessionAction(projectId: string, sessionId: string) {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
+    const { error } = await supabase
+        .from('chat_sessions')
+        .delete()
+        .eq('id', sessionId);
 
-    if (data.project.chatSessions) {
-        data.project.chatSessions = data.project.chatSessions.filter(s => s.id !== sessionId);
-        await saveProjectData(data);
-        revalidatePath(`/projects/${projectId}`);
-    }
+    if (error) throw error;
+
+    revalidatePath(`/projects/${projectId}`);
 }
 
 export async function chatWithProjectAction(
@@ -306,22 +316,19 @@ export async function chatWithProjectAction(
     const studies = data.studies;
     const personas = data.personas;
 
-    if (!project.chatSessions) project.chatSessions = [];
-    const sessionIndex = project.chatSessions.findIndex(s => s.id === sessionId);
-    if (sessionIndex !== -1) {
-        project.chatSessions[sessionIndex].messages.push({
-            role: 'user',
-            text: message,
-            attachments: attachments.map(a => ({
-                name: a.name,
-                type: a.type,
-                data: a.data, // Persisting base64 for now (consider cloud storage for prod)
-                mimeType: a.mimeType
-            }))
-        });
-        project.chatSessions[sessionIndex].selectedContextIds = selectedContextIds;
-        project.chatSessions[sessionIndex].updatedAt = new Date().toISOString();
-    }
+    // 1. Fetch current session messages to append
+    const { data: sessionData, error: fetchError } = await supabase
+        .from('chat_sessions')
+        .select('messages')
+        .eq('id', sessionId)
+        .single();
+
+    if (fetchError) throw fetchError;
+
+    const currentMessages = sessionData.messages || [];
+
+    // Add user message locally for context building if needed, 
+    // but LLM uses history + message arguments.
 
     let context = `# Project Context\n\n`;
     context += `**Project Title:** ${project.title}\n`;
@@ -358,14 +365,10 @@ export async function chatWithProjectAction(
             context += `- **Purpose:** ${study.plan.purpose}\n`;
             context += `- **Methodology:** ${study.plan.methodology.type}\n`;
 
-            if (study.sessions.length > 0) {
-                context += `- **Key Insights from ${study.sessions.length} sessions:**\n`;
-                study.sessions.forEach((session) => {
-                    if (session.structuredData && session.structuredData.length > 0) {
-                        session.structuredData.forEach((insight) => {
-                            context += `  * [${insight.type.toUpperCase()}] ${insight.content}\n`;
-                        });
-                    }
+            if (study._insights && study._insights.length > 0) {
+                context += `- **Key Insights:**\n`;
+                study._insights.forEach((insight: any) => {
+                    context += `  * [${insight.type.toUpperCase()}] ${insight.content}\n`;
                 });
             }
             context += '\n';
@@ -373,7 +376,7 @@ export async function chatWithProjectAction(
     } else if (selectedContextIds.length === 0) {
         context += `## Research Overview\nTotal studies: ${studies.length}\n`;
         studies.forEach(s => {
-            context += `- ${s.title}: ${s.status} (${s.sessions.length} sessions)\n`;
+            context += `- ${s.title}: ${s.status}\n`;
         });
     }
 
@@ -385,14 +388,42 @@ export async function chatWithProjectAction(
             mimeType: a.mimeType
         }));
 
-    const responseText = await chatWithProjectStrategicAI(history, message, context, modelType, images);
+    const responseText = await chatWithProjectStrategicAI(
+        history.slice(-10), // Limit history to prevent token bloat
+        message,
+        context.slice(0, 30000), // Hard cap context size
+        modelType,
+        images
+    );
 
-    if (sessionIndex !== -1) {
-        project.chatSessions[sessionIndex].messages.push({ role: 'model', text: responseText });
-        project.chatSessions[sessionIndex].updatedAt = new Date().toISOString();
-        await saveProjectData(data);
-        revalidatePath(`/projects/${projectId}`);
-    }
+    // 2. Persist BOTH user message and model response directly
+    const newUserMessage = {
+        role: 'user',
+        text: message,
+        attachments: attachments.map(a => ({
+            name: a.name,
+            type: a.type,
+            data: a.data,
+            mimeType: a.mimeType
+        }))
+    };
+    const newModelMessage = { role: 'model', text: responseText };
+
+    const updatedMessages = [...currentMessages, newUserMessage, newModelMessage];
+
+    const { error: updateError } = await supabase
+        .from('chat_sessions')
+        .update({
+            messages: updatedMessages,
+            selected_context_ids: selectedContextIds,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', sessionId);
+
+    if (updateError) throw updateError;
+
+    // Using revalidatePath to refresh UI data
+    revalidatePath(`/projects/${projectId}`);
 
     return responseText;
 }

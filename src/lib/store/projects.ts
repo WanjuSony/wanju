@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { Project, ProjectData, Persona, ResearchStudy, RealInterview, StructuredInsight, KnowledgeDocument } from '../types';
+import { Project, ProjectData, Persona, ResearchStudy, RealInterview, StructuredInsight, KnowledgeDocument, WeeklyReport, ChatSession } from '../types';
 
 // Helper to map DB rows to Types
 // Note: JSONB columns are returned as objects, so we cast them.
@@ -41,10 +41,11 @@ export async function getProject(id: string): Promise<ProjectData | null> {
             studies (
                 *,
                 interviews (
-                    *,
-                    insights (*)
-                )
-            )
+                    id, title, date, start_time, end_time, summary, recording_url, participants, participant_id, sort_order, interviewer_feedback
+                ),
+                reports (*)
+            ),
+            chat_sessions (*)
         `)
         .eq('id', id)
         .single();
@@ -69,33 +70,44 @@ export async function getProject(id: string): Promise<ProjectData | null> {
     // Map Studies
     const studies: ResearchStudy[] = (projectData.studies || []).map((studyRow: any) => {
         // Map Interviews
-        const sessions: RealInterview[] = (studyRow.interviews || []).map((interviewRow: any) => {
-            // Map Insights
-            const structuredData: StructuredInsight[] = (interviewRow.insights || []).map((r: any) => ({
-                id: r.id,
-                type: r.type,
-                content: r.content,
-                source: 'user',
-                evidence: r.evidence,
-                importance: r.importance
-            }));
+        const sessions: RealInterview[] = (studyRow.interviews || [])
+            .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .map((interviewRow: any) => {
+                // Map Insights
+                const structuredData: StructuredInsight[] = []; // Insights are now fetched on-demand for performance
 
-            return {
-                id: interviewRow.id,
-                projectId: id,
-                studyId: studyRow.id,
-                title: interviewRow.title,
-                transcriptId: '',
-                date: interviewRow.date,
-                structuredData,
-                summary: interviewRow.summary,
-                content: interviewRow.transcript,
-                participants: interviewRow.participants,
-                audioUrl: interviewRow.recording_url,
-                videoUrl: interviewRow.recording_url,
-                note: {},
-            };
-        });
+                return {
+                    id: interviewRow.id,
+                    projectId: id,
+                    studyId: studyRow.id,
+                    title: interviewRow.title,
+                    transcriptId: '',
+                    date: interviewRow.date,
+                    startTime: interviewRow.start_time,
+                    endTime: interviewRow.end_time,
+                    structuredData,
+                    summary: interviewRow.summary,
+                    content: interviewRow.transcript || '', // Might be empty in lightweight view
+                    interviewerFeedback: interviewRow.interviewer_feedback,
+                    participants: interviewRow.participants,
+                    speakers: Array.isArray(interviewRow.participants) ? interviewRow.participants : [],
+                    participantId: interviewRow.participant_id,
+                    audioUrl: interviewRow.recording_url,
+                    videoUrl: interviewRow.recording_url,
+                    note: {},
+                    segments: interviewRow.segments || [], // Might be empty in lightweight view
+                    sortOrder: interviewRow.sort_order
+                };
+            });
+
+        // Map Reports
+        const reports: WeeklyReport[] = (studyRow.reports || []).map((r: any) => ({
+            id: r.id,
+            createdAt: r.created_at,
+            title: r.title,
+            interviewIds: r.interview_ids || [],
+            content: r.content
+        }));
 
         return {
             id: studyRow.id,
@@ -104,17 +116,27 @@ export async function getProject(id: string): Promise<ProjectData | null> {
             description: studyRow.description,
             createdAt: studyRow.created_at,
             updatedAt: studyRow.created_at,
-            status: 'planning',
+            status: studyRow.status || 'planning',
             plan: {
-                purpose: studyRow.description || '',
+                purpose: studyRow.description || studyRow.questions?.purpose || '',
                 ...studyRow.questions
             },
             sessions,
+            reports, // Add reports
             discussionGuide: studyRow.questions?.discussionGuide || [],
             participantIds: [],
             changeLogs: []
         };
     });
+
+    // Map Chat Sessions
+    const chatSessions: ChatSession[] = (projectData.chat_sessions || []).map((s: any) => ({
+        id: s.id,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+        messages: s.messages || [],
+        selectedContextIds: s.selected_context_ids || []
+    })).sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
     return {
         project: {
@@ -126,7 +148,8 @@ export async function getProject(id: string): Promise<ProjectData | null> {
             status: projectData.status,
             createdAt: projectData.created_at,
             updatedAt: projectData.updated_at,
-            order: projectData.order
+            order: projectData.order,
+            chatSessions // Add mapped chat sessions
         },
         studies,
         personas
@@ -182,6 +205,7 @@ export async function saveProjectData(data: ProjectData): Promise<void> {
             project_id: data.project.id,
             title: s.title,
             description: s.plan.purpose,
+            status: s.status,
             questions: { ...s.plan, discussionGuide: s.discussionGuide } // Storing complex plan in jsonb
         });
 
@@ -193,10 +217,14 @@ export async function saveProjectData(data: ProjectData): Promise<void> {
                 project_id: data.project.id,
                 title: i.title,
                 date: i.date,
+                start_time: i.startTime,
+                end_time: i.endTime,
                 transcript: i.content,
                 summary: i.summary,
                 recording_url: i.audioUrl || i.videoUrl, // Map URL
-                participants: i.participants || {}
+                participants: i.speakers || i.participants || [], // Map speakers -> participants (JSONB)
+                participant_id: i.participantId,
+                interviewer_feedback: i.interviewerFeedback // Save Feedback
             });
 
             // 5. Upsert Insights
@@ -208,9 +236,26 @@ export async function saveProjectData(data: ProjectData): Promise<void> {
                     type: ins.type,
                     content: ins.content,
                     evidence: ins.evidence || '',
-                    importance: ins.importance || '' // Check type compatibility
+                    importance: ins.importance || '',
+                    meaning: ins.meaning || '',
+                    recommendation: ins.recommendation || '',
+                    research_question: ins.researchQuestion || '',
+                    source_segment_id: ins.sourceSegmentId || ''
                 });
             }
+        }
+
+        // 6. Upsert Reports
+        for (const r of (s.reports || [])) {
+            await supabase.from('reports').upsert({
+                id: r.id,
+                project_id: data.project.id,
+                study_id: s.id,
+                title: r.title,
+                content: r.content,
+                created_at: r.createdAt,
+                interview_ids: r.interviewIds
+            });
         }
     }
 }
@@ -229,4 +274,53 @@ export async function deleteInterview(id: string): Promise<void> {
 
 export async function deleteInsight(id: string): Promise<void> {
     await supabase.from('insights').delete().eq('id', id);
+}
+
+export async function getInterview(id: string): Promise<RealInterview | null> {
+    const { data, error } = await supabase
+        .from('interviews')
+        .select(`
+            *,
+            insights (*)
+        `)
+        .eq('id', id)
+        .single();
+
+    if (error || !data) return null;
+
+    const structuredData: StructuredInsight[] = (data.insights || []).map((r: any) => ({
+        id: r.id,
+        type: r.type,
+        content: r.content,
+        source: r.source || 'user',
+        evidence: r.evidence,
+        importance: r.importance,
+        meaning: r.meaning,
+        recommendation: r.recommendation,
+        researchQuestion: r.research_question,
+        sourceSegmentId: r.source_segment_id
+    }));
+
+    return {
+        id: data.id,
+        projectId: data.project_id,
+        studyId: data.study_id,
+        title: data.title,
+        transcriptId: '',
+        date: data.date,
+        startTime: data.start_time,
+        endTime: data.end_time,
+        structuredData,
+        summary: data.summary,
+        content: data.transcript,
+        interviewerFeedback: data.interviewer_feedback,
+        participants: data.participants,
+        speakers: Array.isArray(data.participants) ? data.participants : [],
+        participantId: data.participant_id,
+        audioUrl: data.recording_url,
+        videoUrl: data.recording_url,
+        note: {},
+        segments: data.segments,
+        sortOrder: data.sort_order
+    };
 }

@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { useState, useTransition, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { reanalyzeInterviewAction, addManualInsightAction, generateSummaryAction, generateFeedbackAction, createPersonaFromInterviewAction, uploadInterviewVideoAction, uploadInterviewAudioAction, saveInterviewVideoUrlAction, autoTranscribeMediaAction, uploadInterviewTranscriptAction, updateSpeakerInfoAction, linkPersonaToInterviewAction, updateInterviewNoteAction, updatePersonaAction, deleteInsightAction, updateInsightAction, updateInsightOrderAction, updateInterviewHypothesisReviewAction } from '@/app/actions';
+import { reanalyzeInterviewAction, addManualInsightAction, generateSummaryAction, generateFeedbackAction, createPersonaFromInterviewAction, uploadInterviewVideoAction, uploadInterviewAudioAction, saveInterviewVideoUrlAction, autoTranscribeMediaAction, uploadInterviewTranscriptAction, updateSpeakerInfoAction, linkPersonaToInterviewAction, updateInterviewNoteAction, updatePersonaAction, deleteInsightAction, updateInsightAction, updateInsightOrderAction, updateInterviewHypothesisReviewAction, deleteSpeakerAction, getInterviewAction } from '@/app/actions';
 
 // ... (existing imports)
 
@@ -43,7 +43,24 @@ interface Props {
 // A safer approach for "Ref: 0:03" vs "00:03" is to try both.
 const normalizedId = (ts: string) => `transcript-${ts.replace(/:/g, '-')}`;
 
-export function InterviewReport({ interview, projectId, studyId, guideBlocks = [], personas = [], studyTitle, allInterviews = [], researchQuestions = [] }: Props) {
+export function InterviewReport({ interview: initialInterview, projectId, studyId, guideBlocks = [], personas = [], studyTitle, allInterviews = [], researchQuestions = [] }: Props) {
+
+    const [interview, setInterview] = useState<RealInterview>(initialInterview);
+    const [isLoadingFull, setIsLoadingFull] = useState(false);
+
+    useEffect(() => {
+        // If content is empty (lightweight fetch), fetch full data
+        if (!interview.content && !isLoadingFull) {
+            setIsLoadingFull(true);
+            getInterviewAction(interview.id).then(fullData => {
+                if (fullData) {
+                    setInterview(fullData);
+                }
+            }).finally(() => {
+                setIsLoadingFull(false);
+            });
+        }
+    }, [interview.id, interview.content, isLoadingFull]);
 
     const insights = interview.structuredData || [];
     const [coppied, setCoppied] = useState(false);
@@ -410,6 +427,22 @@ export function InterviewReport({ interview, projectId, studyId, guideBlocks = [
         }
     };
 
+    const handleDeleteSpeaker = async (speakerId: string) => {
+        setIsSavingSpeakers(true);
+        try {
+            await deleteSpeakerAction(projectId, studyId, interview.id, speakerId);
+            // Optimistic update for local state
+            const newSpeakers = speakers.filter(s => s.id !== speakerId);
+            setSpeakers(newSpeakers);
+            router.refresh(); // Refresh to update transcript content
+        } catch (e) {
+            console.error(e);
+            alert('화자 삭제 실패');
+        } finally {
+            setIsSavingSpeakers(false);
+        }
+    };
+
 
 
     // Parse Notes
@@ -619,15 +652,32 @@ export function InterviewReport({ interview, projectId, studyId, guideBlocks = [
                                         {personas.filter(p => p.source === 'real').length > 0 ? personas.filter(p => p.source === 'real').map(p => (
                                             <button
                                                 key={p.id}
-                                                onClick={() => handleLinkPersona(p.id)}
+                                                disabled={isPending}
+                                                onClick={() => {
+                                                    setPendingAction(`linkPersona-${p.id}`);
+                                                    startTransition(async () => {
+                                                        try {
+                                                            await handleLinkPersona(p.id);
+                                                        } finally {
+                                                            setPendingAction(null);
+                                                        }
+                                                    });
+                                                }}
                                                 className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2
                                                     ${p.id === interview.participantId
                                                         ? 'bg-indigo-50 text-indigo-700'
                                                         : 'text-slate-700 hover:bg-slate-50'
-                                                    }`}
+                                                    } ${isPending ? 'opacity-50 cursor-wait' : ''}`}
                                             >
                                                 <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 overflow-hidden flex-shrink-0 border border-slate-200">
-                                                    {p.name ? p.name.charAt(0).toUpperCase() : '?'}
+                                                    {pendingAction === `linkPersona-${p.id}` ? (
+                                                        <svg className="animate-spin h-3 w-3 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                    ) : (
+                                                        p.name ? p.name.charAt(0).toUpperCase() : '?'
+                                                    )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="truncate font-bold">{p.name || "Unknown"}</div>
@@ -639,17 +689,35 @@ export function InterviewReport({ interview, projectId, studyId, guideBlocks = [
                                             <div className="text-xs text-slate-400 p-2 text-center">No personas found.</div>
                                         )}
                                         <button
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-brand-600 hover:bg-brand-50 flex items-center gap-2 border-t border-slate-100 mt-1 pt-2 transition ${isPending ? 'opacity-50 cursor-wait' : ''}`}
+                                            disabled={isPending}
                                             onClick={() => {
+                                                setPendingAction('createPersona');
                                                 startTransition(async () => {
-                                                    await createPersonaFromInterviewAction(projectId, studyId, interview.id);
-                                                    setIsLinkingPersona(false);
+                                                    try {
+                                                        await createPersonaFromInterviewAction(projectId, studyId, interview.id);
+                                                        setIsLinkingPersona(false);
+                                                        router.refresh();
+                                                    } catch (e) {
+                                                        alert("Failed to create persona");
+                                                    } finally {
+                                                        setPendingAction(null);
+                                                    }
                                                 });
                                             }}
-                                            disabled={isPending}
-                                            className="w-full text-left px-3 py-3 rounded-lg text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 mb-1 flex items-center justify-center gap-2 h-12 mt-2"
                                         >
-                                            <span className="text-lg">✨</span>
-                                            {isPending ? 'Generating...' : 'Create from this Interview'}
+                                            <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold border border-brand-200">
+                                                {isPending && pendingAction === 'createPersona' ? (
+                                                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                ) : '+'}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="font-black">Create from Interview</div>
+                                                <div className="text-[10px] text-brand-400 font-normal">Extract persona from this session</div>
+                                            </div>
                                         </button>
                                         <div className="border-t border-slate-100 my-1"></div>
                                         <button
@@ -701,36 +769,47 @@ export function InterviewReport({ interview, projectId, studyId, guideBlocks = [
                     </div>
 
                     {activeTab === 'transcript' && (
-                        <TranscriptTab
-                            interview={interview}
-                            transcriptData={transcriptData}
-                            speakers={speakers}
-                            setSpeakers={setSpeakers}
-                            handleSaveSpeakers={handleSaveSpeakers}
-                            isSavingSpeakers={isSavingSpeakers}
-                            audioRef={audioRef}
-                            currentTime={currentTime}
-                            duration={duration}
-                            playbackRate={playbackRate}
-                            isPlaying={isPlaying}
-                            togglePlay={togglePlay}
-                            handleSpeedChange={handleSpeedChange}
-                            handleSeek={handleSeek}
-                            handleTimeUpdate={handleTimeUpdate}
-                            handleLoadedMetadata={handleLoadedMetadata}
-                            handleUploadAudio={handleUploadAudio}
-                            handleUploadTranscript={handleUploadTranscript}
-                            isUploading={isUploading}
-                            currentSegmentIndex={currentSegmentIndex}
-                            handleJumpToTimestamp={handleJumpToTimestamp}
-                            handleAutoTranscribeClick={handleAutoTranscribeClick}
-                            formatTime={formatTime}
-                            speakerCount={speakerCount}
-                            setSpeakerCount={setSpeakerCount}
-                            interviewerName={interviewerNameInput}
-                            setInterviewerName={setInterviewerNameInput}
-                            onStartTranscription={confirmTranscribe}
-                        />
+                        <div className="flex-1 flex flex-col min-h-0 relative">
+                            {isLoadingFull && (
+                                <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <div className="animate-spin text-brand-600 text-2xl">↻</div>
+                                        <p className="text-xs font-bold text-slate-500">데이터를 불러오는 중...</p>
+                                    </div>
+                                </div>
+                            )}
+                            <TranscriptTab
+                                interview={interview}
+                                transcriptData={transcriptData}
+                                speakers={speakers}
+                                setSpeakers={setSpeakers}
+                                handleSaveSpeakers={handleSaveSpeakers}
+                                isSavingSpeakers={isSavingSpeakers}
+                                audioRef={audioRef}
+                                currentTime={currentTime}
+                                duration={duration}
+                                playbackRate={playbackRate}
+                                isPlaying={isPlaying}
+                                togglePlay={togglePlay}
+                                handleSpeedChange={handleSpeedChange}
+                                handleSeek={handleSeek}
+                                handleTimeUpdate={handleTimeUpdate}
+                                handleLoadedMetadata={handleLoadedMetadata}
+                                handleUploadAudio={handleUploadAudio}
+                                handleUploadTranscript={handleUploadTranscript}
+                                isUploading={isUploading}
+                                currentSegmentIndex={currentSegmentIndex}
+                                handleJumpToTimestamp={handleJumpToTimestamp}
+                                handleAutoTranscribeClick={handleAutoTranscribeClick}
+                                formatTime={formatTime}
+                                speakerCount={speakerCount}
+                                setSpeakerCount={setSpeakerCount}
+                                interviewerName={interviewerNameInput}
+                                setInterviewerName={setInterviewerNameInput}
+                                onStartTranscription={confirmTranscribe}
+                                onDeleteSpeaker={handleDeleteSpeaker}
+                            />
+                        </div>
                     )}
 
                     {activeTab === 'video' && (
@@ -890,8 +969,13 @@ export function InterviewReport({ interview, projectId, studyId, guideBlocks = [
                                             onGenerate={() => {
                                                 setPendingAction('feedback');
                                                 startTransition(async () => {
-                                                    await generateFeedbackAction(projectId, studyId, interview.id);
-                                                    setPendingAction(null);
+                                                    try {
+                                                        await generateFeedbackAction(projectId, studyId, interview.id);
+                                                    } catch (e: any) {
+                                                        alert("피드백 생성 실패: " + (e.message || "알 수 없는 오류"));
+                                                    } finally {
+                                                        setPendingAction(null);
+                                                    }
                                                 });
                                             }}
                                             onJump={handleJumpToTimestamp}

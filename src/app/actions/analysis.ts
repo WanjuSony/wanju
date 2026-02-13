@@ -139,35 +139,57 @@ export async function generateSummaryAction(projectId: string, studyId: string, 
 
 export async function generateFeedbackAction(projectId: string, studyId: string, interviewId: string) {
     const data = await getProject(projectId);
-    if (!data) return;
+    if (!data) throw new Error("Project not found");
 
     const study = data.studies.find(s => s.id === studyId);
-    if (!study) return;
+    if (!study) throw new Error("Study not found");
 
     const interview = study.sessions.find(i => i.id === interviewId);
-    if (!interview || !interview.content) return;
+    if (!interview || !interview.content) throw new Error("Interview content not found");
 
     const discussionGuideList = study?.discussionGuide
         ? study.discussionGuide.filter(b => b.type === 'question').map(b => b.content)
         : [];
 
+    // Use existing segments if available, otherwise parse
+    let segments = interview.segments || [];
+    console.log(`[FeedbackAction] Interview ID: ${interviewId}, Content Length: ${interview.content?.length || 0}, Segments Count: ${segments.length}`);
+
+    if (!segments || segments.length === 0) {
+        console.log("[FeedbackAction] Segments missing, parsing content...");
+        const { parseTranscriptContent } = await import('@/lib/transcript-parser');
+        const parsed = parseTranscriptContent(interview.content, interview.title);
+        segments = parsed.segments;
+        console.log(`[FeedbackAction] Parsed ${segments.length} segments.`);
+    }
+
     const transcriptObj = {
         id: interview.id,
         title: interview.title,
         headers: [],
-        segments: [],
+        segments: segments, // Ensure segments are populated
         rawContent: interview.content
     };
 
-    const feedback = await generateInterviewerFeedback(transcriptObj, discussionGuideList, {
-        projectTitle: data.project.title,
-        projectDescription: data.project.description,
-        methodologies: [study.plan.methodology.type]
-    });
-    interview.interviewerFeedback = feedback;
+    try {
+        console.log("[FeedbackAction] Calling generateInterviewerFeedback...");
+        const feedback = await generateInterviewerFeedback(transcriptObj, discussionGuideList, {
+            projectTitle: data.project.title,
+            projectDescription: data.project.description,
+            methodologies: [study.plan.methodology.type]
+        });
+        console.log("[FeedbackAction] Feedback generated successfully. Length:", feedback.length);
 
-    await saveProjectData(data);
-    revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+        interview.interviewerFeedback = feedback;
+
+        await saveProjectData(data);
+        console.log("[FeedbackAction] Project data saved.");
+
+        revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+    } catch (e: any) {
+        console.error("Feedback generation failed:", e);
+        throw new Error(`Feedback generation failed: ${e.message}`);
+    }
 }
 
 export async function createWeeklyReportAction(projectId: string, studyId: string, interviewIds: string[], reportTitle: string, userComments: string) {
