@@ -41,7 +41,7 @@ export async function getProject(id: string): Promise<ProjectData | null> {
             studies (
                 *,
                 interviews (
-                    id, title, date, start_time, end_time, summary, recording_url, participants, participant_id, sort_order, interviewer_feedback
+                    id, title, date, start_time, end_time, summary, recording_url, participants, participant_id, sort_order, interviewer_feedback, transcript, segments
                 ),
                 reports (*)
             ),
@@ -94,8 +94,9 @@ export async function getProject(id: string): Promise<ProjectData | null> {
                     participantId: interviewRow.participant_id,
                     audioUrl: interviewRow.recording_url,
                     videoUrl: interviewRow.recording_url,
-                    note: {},
-                    segments: interviewRow.segments || [], // Might be empty in lightweight view
+                    duration: interviewRow.duration,
+                    note: interviewRow.notes || {},
+                    segments: interviewRow.segments || [],
                     sortOrder: interviewRow.sort_order
                 };
             });
@@ -149,6 +150,7 @@ export async function getProject(id: string): Promise<ProjectData | null> {
             createdAt: projectData.created_at,
             updatedAt: projectData.updated_at,
             order: projectData.order,
+            documents: projectData.documents || [],
             chatSessions // Add mapped chat sessions
         },
         studies,
@@ -183,6 +185,7 @@ export async function saveProjectData(data: ProjectData): Promise<void> {
         goal: data.project.goal,
         exit_criteria: data.project.exitCriteria,
         status: data.project.status,
+        documents: data.project.documents,
         updated_at: new Date().toISOString()
     });
 
@@ -222,9 +225,12 @@ export async function saveProjectData(data: ProjectData): Promise<void> {
                 transcript: i.content,
                 summary: i.summary,
                 recording_url: i.audioUrl || i.videoUrl, // Map URL
+                duration: i.duration,
                 participants: i.speakers || i.participants || [], // Map speakers -> participants (JSONB)
                 participant_id: i.participantId,
-                interviewer_feedback: i.interviewerFeedback // Save Feedback
+                interviewer_feedback: i.interviewerFeedback, // Save Feedback
+                notes: i.note,
+                segments: i.segments
             });
 
             // 5. Upsert Insights
