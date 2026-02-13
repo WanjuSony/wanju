@@ -13,6 +13,12 @@ import fs from 'fs';
 import path from 'path';
 import { safeParseJSON } from '@/lib/transcript-json-parser';
 import { supabase } from '@/lib/supabase';
+import os from 'os';
+import { pipeline } from 'stream';
+import { promisify } from 'util';
+import { Readable } from 'stream';
+
+const streamPipeline = promisify(pipeline);
 
 async function extractContent(file: File): Promise<string> {
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -375,6 +381,19 @@ export async function saveInterviewVideoUrlAction(projectId: string, studyId: st
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
 }
 
+async function downloadFile(url: string, fileName: string): Promise<string> {
+    const tempDir = os.tmpdir();
+    const filePath = path.join(tempDir, fileName);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
+    if (!response.body) throw new Error('Response body is null');
+
+    const writer = fs.createWriteStream(filePath);
+    // @ts-ignore - Readable.fromWeb exists in Node 18+ which is used by Vercel
+    await streamPipeline(Readable.fromWeb(response.body), writer);
+    return filePath;
+}
+
 export async function autoTranscribeMediaAction(projectId: string, studyId: string, interviewId: string, speakerCount: number = 2, interviewerName: string = "") {
     const data = await getProject(projectId);
     if (!data) throw new Error("Project not found");
@@ -392,7 +411,15 @@ export async function autoTranscribeMediaAction(projectId: string, studyId: stri
     const mediaUrl = interview.audioUrl || interview.videoUrl;
     if (!mediaUrl) throw new Error("Media URL is missing");
 
-    const mediaPath = path.join(process.cwd(), 'public', mediaUrl);
+    let mediaPath = "";
+    const isUrl = mediaUrl.startsWith('http');
+
+    if (isUrl) {
+        const ext = path.extname(new URL(mediaUrl).pathname) || '.mp3';
+        mediaPath = await downloadFile(mediaUrl, `transcribe-${interviewId}${ext}`);
+    } else {
+        mediaPath = path.join(process.cwd(), 'public', mediaUrl);
+    }
 
     const ext = path.extname(mediaPath).toLowerCase();
     let mimeType = 'audio/mp3';
@@ -402,7 +429,7 @@ export async function autoTranscribeMediaAction(projectId: string, studyId: stri
     if (ext === '.webm') mimeType = 'video/webm';
 
     try {
-        const resultText = await transcribeMedia(mediaPath, mimeType, speakerCount, interviewerName);
+        const resultText = await transcribeMedia(mediaPath, mimeType, speakerCount, interviewerName, mediaPath);
 
         // 1. Attempt Safe JSON Parsing (Preferred)
         let segments = safeParseJSON(resultText);

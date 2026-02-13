@@ -47,20 +47,29 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
 
     const [interview, setInterview] = useState<RealInterview>(initialInterview);
     const [isLoadingFull, setIsLoadingFull] = useState(false);
+    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
     useEffect(() => {
-        // If content is empty (lightweight fetch), fetch full data
-        if (!interview.content && !isLoadingFull) {
+        setHasLoadedOnce(false);
+    }, [interview.id]);
+
+    useEffect(() => {
+        // If content is empty (lightweight fetch) AND we haven't tried loading yet
+        if (!interview.content && !isLoadingFull && !hasLoadedOnce) {
             setIsLoadingFull(true);
             getInterviewAction(interview.id).then(fullData => {
                 if (fullData) {
                     setInterview(fullData);
                 }
+                setHasLoadedOnce(true);
+            }).catch(err => {
+                console.error("Full data fetch failed:", err);
+                setHasLoadedOnce(true);
             }).finally(() => {
                 setIsLoadingFull(false);
             });
         }
-    }, [interview.id, interview.content, isLoadingFull]);
+    }, [interview.id, interview.content, isLoadingFull, hasLoadedOnce]);
 
     const insights = interview.structuredData || [];
     const [coppied, setCoppied] = useState(false);
