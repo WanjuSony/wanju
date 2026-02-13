@@ -55,7 +55,6 @@ export async function addInterviewAction(projectId: string, studyId: string, fil
         project_id: projectId,
         study_id: studyId,
         title: filename,
-        transcript_id: filename,
         date: new Date().toISOString().split('T')[0],
         start_time: '10:00',
         end_time: '11:00',
@@ -95,7 +94,6 @@ export async function addInterviewFromContentAction(projectId: string, studyId: 
         project_id: projectId,
         study_id: studyId,
         title: filename,
-        transcript_id: filename,
         date: new Date().toISOString().split('T')[0],
         start_time: '10:00',
         end_time: '11:00',
@@ -259,8 +257,7 @@ export async function uploadInterviewTranscriptAction(projectId: string, studyId
     // Surgical Update for Reliability
     const { error } = await supabase.from('interviews').update({
         transcript: transcript.rawContent,
-        segments: transcript.segments,
-        transcript_id: file.name
+        segments: transcript.segments
     }).eq('id', interviewId);
 
     if (error) {

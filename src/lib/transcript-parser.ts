@@ -51,8 +51,10 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
         console.warn("JSON parse attempt failed, falling back to text", e);
     }
 
-    // Normalize line endings
-    const lines = rawContent.split(/\r?\n/);
+    console.log('[DEBUG] Parsing content sample:', rawContent.substring(0, 200).replace(/\n/g, '\\n'));
+
+    // Normalize line endings (handle \r for legacy Mac/Word exports)
+    const lines = rawContent.split(/\r\n|\r|\n/);
 
     let currentSpeaker = '';
     let currentTimestamp = '';
@@ -63,6 +65,10 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
     // Group 2: Timestamp (MM:SS or HH:MM:SS), optionally wrapped in [], (), or just bare.
     // Separators: Can be space, colon, or nothing.
     const universalRegex = /^([^\d\n].+?)(?:\s+|:\s*|,\s*)[\(\[]?(\d{1,2}:\d{2}(?::\d{2})?)[\)\]]?\s*(?::|-)?\s*(.*)/;
+
+    // [NEW] Robust Chat Regex for "Name Time Text" format (e.g. "나리 3:30예.네")
+    // Handles cases where text immediately follows time, or tight spacing
+    const chatRegex = /^([^\d\n].+?)\s+(\d{1,2}:\d{2})(.*)/;
 
     // Metadata patterns to explicitly identify as headers
     const metadataPatterns = [
@@ -82,7 +88,8 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
         const isMetadata = metadataPatterns.some(p => p.test(trimmedLine));
 
         // 2. Check if it matches the Speaker+Timestamp pattern
-        const match = trimmedLine.match(universalRegex);
+        // Try specific chat regex first, then universal
+        const match = trimmedLine.match(chatRegex) || trimmedLine.match(universalRegex);
 
         if (match && !isMetadata) {
             // It looks like a speaker line AND isn't explicit metadata
