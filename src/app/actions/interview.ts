@@ -117,55 +117,37 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
     const fileText = formData.get('file_text') as File | null;
     const fileAudio = formData.get('file_audio') as File | null;
     const fileVideo = formData.get('file_video') as File | null;
-
-    // Legacy support or bulk upload
     const legacyFiles = formData.getAll('files') as File[];
 
-    const data = await getProject(projectId);
-    if (!data) throw new Error('Project not found');
+    const participantId = formData.get('participantId') as string;
+    const date = formData.get('date') as string || new Date().toISOString().split('T')[0];
+    const startTime = formData.get('startTime') as string || '10:00';
+    const endTime = formData.get('endTime') as string || '11:00';
 
-    const studyIndex = data.studies.findIndex(s => s.id === studyId);
-    if (studyIndex === -1) throw new Error('Study not found');
+    // Helper to upload media
+    const uploadFileToSupabase = async (file: File) => {
+        const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
+        if (error) throw new Error("Failed to upload file to Supabase Storage");
+        const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+        return data.publicUrl;
+    };
 
-    // 1. Handle single interview creation with mixed media (ExecutionManager case)
+    // 1. Single Interview Creation (Mixed Media)
     if (fileText || fileAudio || fileVideo) {
-        const participantId = formData.get('participantId') as string;
-        const date = formData.get('date') as string || new Date().toISOString().split('T')[0];
-        const startTime = formData.get('startTime') as string || '10:00';
-        const endTime = formData.get('endTime') as string || '11:00';
-
         let content = '';
-        let summary = '';
-        let structuredData: any[] = [];
-        let transcriptId = '';
+        let segments: any[] = [];
         let title = '';
+        let audioUrl: string | undefined;
+        let videoUrl: string | undefined;
 
-        // Process Transcript Text
         if (fileText) {
             const textContent = await extractContent(fileText);
             const transcript = parseTranscriptContent(textContent, fileText.name);
             content = transcript.rawContent;
-            summary = '';
-            transcriptId = fileText.name;
+            segments = transcript.segments;
             title = fileText.name.replace(/\.[^/.]+$/, "");
         }
-
-        // Process Audio/Video Uploads
-        let audioUrl: string | undefined = undefined;
-        let videoUrl: string | undefined = undefined;
-
-        const uploadFileToSupabase = async (file: File) => {
-            const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-            const { error } = await supabase.storage.from('uploads').upload(fileName, file, {
-                upsert: true
-            });
-            if (error) {
-                console.error("Supabase Storage Upload Error:", error);
-                throw new Error("Failed to upload file to Supabase Storage");
-            }
-            const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
-            return publicUrlData.publicUrl;
-        };
 
         if (fileAudio) {
             audioUrl = await uploadFileToSupabase(fileAudio);
@@ -179,56 +161,54 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
 
         if (!title) title = `Interview - ${date}`;
 
-        const newInterview: RealInterview = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-            projectId,
-            studyId,
-            transcriptId, // might be empty if only audio
-            title,
-            date,
-            startTime,
-            endTime,
-            structuredData,
-            summary,
-            content,
-            audioUrl,
-            videoUrl,
-            participantId: participantId === 'new' ? undefined : participantId,
-            note: {}
-        };
+        const newInterviewId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
 
-        data.studies[studyIndex].sessions.push(newInterview);
+        await supabase.from('interviews').insert({
+            id: newInterviewId,
+            project_id: projectId,
+            study_id: studyId,
+            title: title,
+            date: date,
+            start_time: startTime,
+            end_time: endTime,
+            transcript: content,
+            segments: segments,
+            recording_url: audioUrl || videoUrl, // Use one column for now as per schema
+            summary: '',
+            notes: {},
+            participant_id: participantId === 'new' ? null : participantId,
+            participants: [] // JSONB column
+        });
     }
-    // 2. Handle legacy bulk text upload (if 'files' still used elsewhere)
+    // 2. Bulk Text Upload
     else if (legacyFiles.length > 0) {
         for (const file of legacyFiles) {
             const content = await extractContent(file);
             const transcript = parseTranscriptContent(content, file.name);
+            const title = file.name.replace(/\.[^/.]+$/, "");
+            const newInterviewId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
 
-            const newInterview: RealInterview = {
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-                projectId,
-                studyId,
-                transcriptId: file.name,
-                title: file.name.replace(/\.[^/.]+$/, ""),
+            await supabase.from('interviews').insert({
+                id: newInterviewId,
+                project_id: projectId,
+                study_id: studyId,
+                title: title,
                 date: new Date().toISOString().split('T')[0],
-                startTime: '10:00',
-                endTime: '11:00',
-                structuredData: [],
-                summary: '', // Transcript details...
-                content: transcript.rawContent,
-                note: {}
-            };
-
-            data.studies[studyIndex].sessions.push(newInterview);
+                start_time: '10:00',
+                end_time: '11:00',
+                transcript: transcript.rawContent,
+                segments: transcript.segments,
+                summary: '',
+                notes: {},
+                participants: []
+            });
         }
     }
 
-    if (data.studies[studyIndex].status === 'planning') {
-        data.studies[studyIndex].status = 'fieldwork';
-    }
+    // Update study status to field work if needed (Direct Update)
+    // We can just try updating it, harmless if already set
+    await supabase.from('studies').update({ status: 'fieldwork' }).eq('id', studyId);
 
-    await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}`);
 }
 
