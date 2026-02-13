@@ -305,14 +305,14 @@ export function TranscriptTab({
                 </div>
             )}
 
-            {/* Use fallback if transcriptData is missing */}
-            {!transcriptData && interview.content && (
+            {/* Use fallback if transcriptData is missing OR segments provided are empty */}
+            {(!transcriptData || (transcriptData.segments && transcriptData.segments.length === 0)) && interview.content && (
                 <div className="text-slate-500 text-sm whitespace-pre-wrap p-4 bg-white rounded-lg border border-slate-200">
                     {interview.content}
                 </div>
             )}
 
-            {!transcriptData && !interview.content && !interview.audioUrl && !canUseVideoAudio && (
+            {(!transcriptData || (transcriptData.segments.length === 0)) && !interview.content && !interview.audioUrl && !canUseVideoAudio && (
                 <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-400 gap-4 bg-white rounded-xl border border-dashed border-slate-200">
                     <div className="text-4xl">🎙️</div>
                     <div className="text-center">

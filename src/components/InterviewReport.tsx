@@ -112,7 +112,7 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         }
 
         // 2. Fallback: Parse from raw content
-        if (!interview.content) return null;
+        if (!interview.content || !interview.content.trim()) return null;
         return parseTranscriptContent(interview.content, interview.title);
     }, [interview.segments, interview.content, interview.title]);
 
