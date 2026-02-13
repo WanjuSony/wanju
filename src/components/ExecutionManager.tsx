@@ -77,13 +77,16 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
             formData.append('endTime', endTime);
             formData.append('participantId', participantId);
 
-            await uploadTranscriptAction(projectId, studyId, formData);
+            // [FIX] Await the returned interview object for immediate UI update
+            const newInterview = await uploadTranscriptAction(projectId, studyId, formData);
 
-            // Force a small delay to ensure UI updates don't conflict, though alert is blocking
-            await new Promise(resolve => setTimeout(resolve, 100));
+            if (newInterview) {
+                setInterviews(prev => [...prev, newInterview]);
+            }
 
-            router.refresh(); // Fetch new data from server
             alert("인터뷰가 성공적으로 추가되었습니다! 페르소나가 새롭게 생성되거나 정보가 업데이트되었습니다.");
+
+            router.refresh(); // Fetch new data from server to be sure
 
             setAddMode(null);
             setTextFile(null);
@@ -92,7 +95,7 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
             setParticipantId('new');
         } catch (e: any) {
             if (e.message === 'NEXT_REDIRECT') return;
-            console.error(e);
+            console.error("Upload failed in ExecutionManager:", e);
             alert(e.message || "Failed to analyze interview");
         } finally {
             setLoading(false);

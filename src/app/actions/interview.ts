@@ -163,7 +163,27 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
 
         const newInterviewId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
 
-        await supabase.from('interviews').insert({
+        const newInterview: RealInterview = {
+            id: newInterviewId,
+            projectId,
+            studyId,
+            transcriptId: newInterviewId,
+            title,
+            date,
+            startTime,
+            endTime,
+            structuredData: [],
+            summary: '',
+            content,
+            segments,
+            audioUrl,
+            videoUrl,
+            participantId: participantId === 'new' ? undefined : participantId,
+            note: {},
+            speakers: []
+        };
+
+        const { error } = await supabase.from('interviews').insert({
             id: newInterviewId,
             project_id: projectId,
             study_id: studyId,
@@ -173,12 +193,24 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
             end_time: endTime,
             transcript: content,
             segments: segments,
-            recording_url: audioUrl || videoUrl, // Use one column for now as per schema
+            recording_url: audioUrl || videoUrl,
             summary: '',
             notes: {},
             participant_id: participantId === 'new' ? null : participantId,
             participants: [] // JSONB column
         });
+
+        if (error) {
+            console.error("Failed to insert interview:", error);
+            throw new Error(`DB Insert Failed: ${error.message}`);
+        }
+
+        // Update study status to field work if needed (Direct Update)
+        await supabase.from('studies').update({ status: 'fieldwork' }).eq('id', studyId);
+
+        revalidatePath(`/projects/${projectId}/studies/${studyId}`);
+
+        return newInterview;
     }
     // 2. Bulk Text Upload
     else if (legacyFiles.length > 0) {
@@ -203,13 +235,8 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
                 participants: []
             });
         }
+        revalidatePath(`/projects/${projectId}/studies/${studyId}`);
     }
-
-    // Update study status to field work if needed (Direct Update)
-    // We can just try updating it, harmless if already set
-    await supabase.from('studies').update({ status: 'fieldwork' }).eq('id', studyId);
-
-    revalidatePath(`/projects/${projectId}/studies/${studyId}`);
 }
 
 export async function uploadInterviewTranscriptAction(projectId: string, studyId: string, interviewId: string, formData: FormData) {
