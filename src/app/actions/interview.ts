@@ -195,9 +195,7 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
             segments: segments,
             recording_url: audioUrl || videoUrl,
             summary: '',
-            notes: {},
-            participant_id: participantId === 'new' ? null : participantId,
-            participants: [] // JSONB column
+            participant_id: participantId === 'new' ? null : participantId
         });
 
         if (error) {
@@ -230,9 +228,7 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
                 end_time: '11:00',
                 transcript: transcript.rawContent,
                 segments: transcript.segments,
-                summary: '',
-                notes: {},
-                participants: []
+                summary: ''
             });
         }
         revalidatePath(`/projects/${projectId}/studies/${studyId}`);
