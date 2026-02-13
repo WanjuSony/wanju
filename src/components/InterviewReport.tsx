@@ -372,7 +372,10 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         const formData = new FormData();
         formData.append('file', file);
         try {
-            await uploadInterviewTranscriptAction(projectId, studyId, interview.id, formData);
+            const updatedInterview = await uploadInterviewTranscriptAction(projectId, studyId, interview.id, formData);
+            if (updatedInterview) {
+                setInterview(updatedInterview as any);
+            }
             alert('녹취록이 등록되었습니다.');
             router.refresh();
         } catch (error) {
@@ -391,7 +394,10 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         const formData = new FormData();
         formData.append('file', file);
         try {
-            await uploadInterviewAudioAction(projectId, studyId, interview.id, formData);
+            const updatedInterview = await uploadInterviewAudioAction(projectId, studyId, interview.id, formData);
+            if (updatedInterview) {
+                setInterview(updatedInterview as any);
+            }
             alert('녹음 파일이 등록되었습니다.');
             router.refresh();
         } catch (error) {
@@ -410,7 +416,10 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         const formData = new FormData();
         formData.append('file', file);
         try {
-            await uploadInterviewVideoAction(projectId, studyId, interview.id, formData);
+            const updatedInterview = await uploadInterviewVideoAction(projectId, studyId, interview.id, formData);
+            if (updatedInterview) {
+                setInterview(updatedInterview as any);
+            }
             alert('비디오 파일이 등록되었습니다.');
             router.refresh();
         } catch (error) {
@@ -425,7 +434,10 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         if (!url.trim()) return;
         setIsUploading(true); // Reusing isUploading for this action
         try {
-            await saveInterviewVideoUrlAction(projectId, studyId, interview.id, url);
+            const updatedInterview = await saveInterviewVideoUrlAction(projectId, studyId, interview.id, url);
+            if (updatedInterview) {
+                setInterview(updatedInterview as any);
+            }
             alert('비디오 링크가 등록되었습니다.');
             router.refresh();
         } catch (e) {

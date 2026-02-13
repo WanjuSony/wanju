@@ -23,7 +23,12 @@ const streamPipeline = promisify(pipeline);
 async function extractContent(file: File): Promise<string> {
     const buffer = Buffer.from(await file.arrayBuffer());
     if (file.name.toLowerCase().endsWith('.docx')) {
+        console.log(`[DEBUG] Extracting DOCX: ${file.name}, size: ${file.size} bytes`);
         const result = await mammoth.extractRawText({ buffer });
+        console.log(`[DEBUG] Extraction result length: ${result.value?.length || 0}`);
+        if (!result.value || result.value.trim().length === 0) {
+            console.warn(`[DEBUG] Mammoth returned empty text for ${file.name}. Messages:`, (result as any).messages);
+        }
         return result.value;
     }
     if (file.name.toLowerCase().endsWith('.pdf')) {
@@ -235,6 +240,7 @@ export async function uploadInterviewTranscriptAction(projectId: string, studyId
 
     await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+    return await getInterview(interviewId);
 }
 
 export async function uploadInterviewAudioAction(projectId: string, studyId: string, interviewId: string, formData: FormData) {
@@ -263,6 +269,7 @@ export async function uploadInterviewAudioAction(projectId: string, studyId: str
 
     await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+    return await getInterview(interviewId);
 }
 
 export async function uploadInterviewVideoAction(projectId: string, studyId: string, interviewId: string, formData: FormData) {
@@ -291,6 +298,7 @@ export async function uploadInterviewVideoAction(projectId: string, studyId: str
 
     await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+    return await getInterview(interviewId);
 }
 
 export async function uploadLiveInterviewAction(projectId: string, studyId: string, formData: FormData) {
@@ -379,6 +387,7 @@ export async function saveInterviewVideoUrlAction(projectId: string, studyId: st
     interview.videoUrl = url;
     await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+    return await getInterview(interviewId);
 }
 
 async function downloadFile(url: string, fileName: string): Promise<string> {
