@@ -376,7 +376,7 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
             if (updatedInterview) {
                 setInterview(updatedInterview as any);
             }
-            alert('녹취록이 등록되었습니다.');
+            alert('텍스트가 성공적으로 등록되었습니다.');
             router.refresh();
         } catch (error) {
             console.error(error);

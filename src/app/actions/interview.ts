@@ -248,14 +248,27 @@ export async function uploadInterviewTranscriptAction(projectId: string, studyId
     if (!interview) return;
 
     const content = await extractContent(file);
+
+    if (!content || content.trim().length === 0) {
+        console.error(`[ERROR] Extraction yielded empty content for file: ${file.name}`);
+        throw new Error("파일에서 텍스트를 추출하지 못했습니다. (내용 없음 또는 추출 실패)");
+    }
+
     const transcript = parseTranscriptContent(content, file.name);
 
     // Surgical Update for Reliability
-    await supabase.from('interviews').update({
+    const { error } = await supabase.from('interviews').update({
         transcript: transcript.rawContent,
         segments: transcript.segments,
         transcript_id: file.name
     }).eq('id', interviewId);
+
+    if (error) {
+        console.error("Failed to update interview transcript:", error);
+        throw new Error(`DB Update Failed: ${error.message}`);
+    } else {
+        console.log(`[DEBUG] Successfully updated transcript for interview ${interviewId}. Raw length: ${transcript.rawContent.length}, Segments: ${transcript.segments.length}`);
+    }
 
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
     return await getInterview(interviewId);
