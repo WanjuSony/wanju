@@ -330,3 +330,16 @@ export async function getInterview(id: string): Promise<RealInterview | null> {
         sortOrder: data.sort_order
     };
 }
+
+export async function updateInterviewFeedback(interviewId: string, feedback: string): Promise<void> {
+    const { error } = await supabase
+        .from('interviews')
+        .update({ interviewer_feedback: feedback })
+        .eq('id', interviewId);
+
+    if (error) {
+        console.error(`[updateInterviewFeedback] Failed to update feedback for ${interviewId}:`, error);
+        throw error;
+    }
+    console.log(`[updateInterviewFeedback] Successfully updated feedback for ${interviewId}`);
+}

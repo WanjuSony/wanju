@@ -4,7 +4,8 @@ import { getProject, saveProjectData, deleteInterview, deleteInsight, getIntervi
 import { revalidatePath } from 'next/cache';
 import { RealInterview, Persona } from '@/lib/types';
 import { transcribeMedia } from '@/lib/transcription-service';
-import { parseTranscriptContent, parseTranscript } from '@/lib/transcript';
+import { parseTranscriptContent } from '@/lib/transcript-parser'; // Updated to use robust parser
+import { parseTranscript } from '@/lib/transcript';
 import mammoth from 'mammoth';
 // @ts-ignore
 import pdf from 'pdf-parse/lib/pdf-parse.js';
@@ -147,6 +148,27 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
             content = transcript.rawContent;
             segments = transcript.segments;
             title = fileText.name.replace(/\.[^/.]+$/, "");
+
+            // VALIDATION: Check for single-speaker parsing issue
+            if (segments && segments.length > 0) {
+                const uniqueSpeakers = new Set(segments.map((s: any) => s.speaker));
+                if (uniqueSpeakers.size === 1) {
+                    const singleSpeaker = Array.from(uniqueSpeakers)[0];
+                    console.error('[UPLOAD VALIDATION] ⚠️  ALL segments assigned to single speaker:', singleSpeaker);
+                    console.error('[UPLOAD VALIDATION] Total segments:', segments.length);
+                    console.error('[UPLOAD VALIDATION] This likely indicates a parsing issue. Check transcript format.');
+
+                    // If the speaker is a known error indicator, log more details
+                    if (singleSpeaker === 'PARSE_ERROR_NO_SPEAKERS_DETECTED' ||
+                        singleSpeaker === 'Transcript' ||
+                        singleSpeaker === 'System') {
+                        console.error('[UPLOAD VALIDATION] CRITICAL: Parser failed to detect speaker patterns!');
+                        console.error('[UPLOAD VALIDATION] File content preview:', textContent.substring(0, 500));
+                    }
+                } else {
+                    console.log('[UPLOAD VALIDATION] ✓ Successfully detected', uniqueSpeakers.size, 'speakers:', Array.from(uniqueSpeakers));
+                }
+            }
         }
 
         if (fileAudio) {

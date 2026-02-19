@@ -53,6 +53,11 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         setHasLoadedOnce(false);
     }, [interview.id]);
 
+    // Sync State with Props (Fix for Re-analysis not updating UI)
+    useEffect(() => {
+        setInterview(initialInterview);
+    }, [initialInterview]);
+
     useEffect(() => {
         // If content is empty (lightweight fetch) AND we haven't tried loading yet
         if (!interview.content && !isLoadingFull && !hasLoadedOnce) {
@@ -328,10 +333,21 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
 
 
     const handleReanalyze = () => {
+        if (!interview.content) {
+            alert("전사 데이터(Transcript)가 없습니다. 먼저 오디오를 업로드하거나 전사를 완료해주세요.");
+            return;
+        }
+
+        console.log("[InterviewReport] Starting Reanalysis...");
         setPendingAction('insights');
         startTransition(async () => {
             try {
                 await reanalyzeInterviewAction(projectId, studyId, interview.id);
+                console.log("[InterviewReport] Reanalysis Action Complete. Refreshing...");
+                router.refresh();
+            } catch (e: any) {
+                console.error("Reanalysis failed:", e);
+                alert(`분석 실패: ${e.message}`);
             } finally {
                 setPendingAction(null);
             }
@@ -906,9 +922,10 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
                                     <button onClick={() => setShowAddInsight(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition">+ Add</button>
                                     <button
                                         onClick={handleReanalyze}
-                                        disabled={isPending}
+                                        disabled={isPending || !interview.content}
+                                        title={!interview.content ? "전사 데이터가 필요합니다" : ""}
                                         className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1
-                                        ${isPending
+                                        ${isPending || !interview.content
                                                 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                                                 : 'bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100'
                                             }`}
@@ -916,23 +933,37 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
                                         {isPending && pendingAction === 'insights' ? '분석 중...' : '🔄 재분석'}
                                     </button>
                                 </>
-                            ) : rightPanelTab === 'feedback' && interview.interviewerFeedback ? (
+                            ) : rightPanelTab === 'feedback' && (interview.interviewerFeedback || interview.content) ? (
                                 <button
                                     onClick={() => {
+                                        if (!interview.content) {
+                                            alert("전사 데이터가 없습니다.");
+                                            return;
+                                        }
+                                        console.log("[InterviewReport] Starting Feedback Generation...");
                                         setPendingAction('feedback');
                                         startTransition(async () => {
-                                            await generateFeedbackAction(projectId, studyId, interview.id);
-                                            setPendingAction(null);
+                                            try {
+                                                await generateFeedbackAction(projectId, studyId, interview.id);
+                                                console.log("[InterviewReport] Feedback Action Complete. Refreshing...");
+                                                router.refresh();
+                                            } catch (e: any) {
+                                                console.error("Feedback generation failed:", e);
+                                                alert(`평가 실패: ${e.message}`);
+                                            } finally {
+                                                setPendingAction(null);
+                                            }
                                         });
                                     }}
-                                    disabled={isPending}
+                                    disabled={isPending || !interview.content}
+                                    title={!interview.content ? "전사 데이터가 필요합니다" : ""}
                                     className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1
-                                    ${isPending
+                                    ${isPending || !interview.content
                                             ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                                             : 'bg-indigo-600 text-white hover:bg-indigo-700'
                                         }`}
                                 >
-                                    {isPending ? '평가 중...' : '⚡ 재평가하기'}
+                                    {isPending ? '평가 중...' : (interview.interviewerFeedback ? '⚡ 재평가하기' : '🎓 평가 시작하기')}
                                 </button>
                             ) : null}
 

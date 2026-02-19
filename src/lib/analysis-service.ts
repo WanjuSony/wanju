@@ -35,8 +35,9 @@ async function callOpenAI(prompt: string, jsonMode: boolean = false): Promise<st
 export async function analyzeTranscript(transcript: Transcript, context?: AnalysisContext): Promise<{ summary: string; insights: StructuredInsight[] }> {
     // Safety Check: If transcript is empty/missing, return default state immediately.
     if (!transcript.rawContent || transcript.rawContent.length < 50 || transcript.rawContent.includes("(No Transcript Provided)")) {
+        console.warn("[AnalysisService] Transcript is empty or too short.");
         return {
-            summary: "Transcript not available for analysis. Please upload an Audio File to generate a transcript first.",
+            summary: "Transcript is not available or too short for analysis. Please upload an audio file or transcript first.",
             insights: []
         };
     }
@@ -118,13 +119,10 @@ export async function analyzeTranscript(transcript: Transcript, context?: Analys
         }
     }
 
-    try {
-        // Clean and Parse
-        textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(textResponse);
+    // Use Robust Parsing
+    const parsed = robustParseAnalysisResult(textResponse);
 
-        if (!parsed.insights || !Array.isArray(parsed.insights)) throw new Error("Invalid JSON structure");
-
+    if (parsed) {
         return {
             summary: parsed.summary || "Summary not generated.",
             insights: parsed.insights.map((item: any, index: number) => ({
@@ -132,11 +130,60 @@ export async function analyzeTranscript(transcript: Transcript, context?: Analys
                 ...item
             }))
         };
-    } catch (parseError) {
+    } else {
+        console.error("JSON Parsing Failed. Raw Response:", textResponse);
+        // Return a partial result with error insight to avoid "No Result" on UI
         return {
-            summary: "Analysis failed to parse.",
-            insights: []
+            summary: "Analysis generated invalid format.",
+            insights: [{
+                id: 'err-parse',
+                type: 'fact',
+                content: "AI Analysis generated content but it could not be processed. Please try again.",
+                meaning: "Raw response was not valid JSON.",
+                sourceSegmentId: "System"
+            }]
         };
+    }
+}
+
+/**
+ * Robustly parses analysis result JSON.
+ * Handle markdown fences, extra text, and basic validation.
+ */
+function robustParseAnalysisResult(text: string): { summary: string, insights: StructuredInsight[] } | null {
+    if (!text) return null;
+
+    try {
+        // 1. Strip Markdown Code Blocks
+        let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        // 2. Extract JSON Object (find first { and last })
+        const firstOpen = clean.indexOf('{');
+        const lastClose = clean.lastIndexOf('}');
+
+        if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+            clean = clean.substring(firstOpen, lastClose + 1);
+        }
+
+        // 3. Parse
+        const parsed = JSON.parse(clean);
+
+        // 4. Validate Structure
+        if (parsed.insights && Array.isArray(parsed.insights)) {
+            return parsed;
+        }
+
+        // Handle case where only partial data is returned or structure is slightly different
+        // E.g. user just returned insights array?
+        if (Array.isArray(parsed)) {
+            return { summary: "", insights: parsed };
+        }
+
+        return null;
+
+    } catch (e) {
+        console.warn("robustParseAnalysisResult failed:", e);
+        return null;
     }
 }
 
@@ -290,12 +337,7 @@ export async function generateSummary(transcript: Transcript, context?: Analysis
 export async function generateInterviewerFeedback(transcript: Transcript, discussionGuide: string[], context?: AnalysisContext): Promise<string> {
     // Safety Check
     if (!transcript.rawContent || transcript.rawContent.length < 50 || transcript.rawContent.includes("(No Transcript Provided)")) {
-        return JSON.stringify({
-            score: 0,
-            overall_critique: "Transcript is too short or missing for meaningful feedback.",
-            strengths: [],
-            improvements: []
-        });
+        throw new Error("Transcript is too short or missing for meaningful feedback. Please upload a transcript first.");
     }
 
     const prompt = `
@@ -333,18 +375,59 @@ export async function generateInterviewerFeedback(transcript: Transcript, discus
             });
         });
 
-        // Return raw text, but ensure it looks like JSON if possible
-        const text = result.response.text();
+        // clean up potential markdown fencing
+        let text = result.response.text();
         if (!text || text.trim().length === 0) throw new Error("Empty response from AI");
-        return text;
+
+        // CLEANUP: Robustly extract JSON
+        const cleanJson = extractJson(text);
+        if (!cleanJson) {
+            throw new Error("Failed to extract valid JSON from AI response.");
+        }
+
+        // Validate JSON structure (optional but good)
+        // JSON.parse(cleanJson); // This verifies it is valid JSON
+
+        return cleanJson;
 
     } catch (e: any) {
         console.warn("Gemini Feedback Failed, trying OpenAI...", e.message);
         try {
-            return await callOpenAI(prompt, true);
+            const openAiResponse = await callOpenAI(prompt, true);
+            const cleanJson = extractJson(openAiResponse);
+            if (!cleanJson) throw new Error("Failed to extract JSON from OpenAI response");
+            return cleanJson;
         } catch (openaiErr: any) {
             console.error("Feedback Generation Failed completely:", openaiErr);
             throw new Error(`AI Analysis Failed: ${openaiErr.message || "Unknown error"}`);
         }
+    }
+}
+
+/**
+ * Helper to extract JSON object from a string that might contain Markdown or other text.
+ */
+function extractJson(text: string): string | null {
+    try {
+        // 1. Remove Markdown Code Blocks
+        let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        // 2. Find the first '{' and last '}'
+        const firstOpen = clean.indexOf('{');
+        const lastClose = clean.lastIndexOf('}');
+
+        if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+            clean = clean.substring(firstOpen, lastClose + 1);
+            // Verify if it parses
+            JSON.parse(clean);
+            return clean;
+        }
+
+        // Try parsing the whole thing if curly braces check failed (e.g. array?)
+        // But feedback expects an object.
+        JSON.parse(clean);
+        return clean;
+    } catch (e) {
+        return null;
     }
 }

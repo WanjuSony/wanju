@@ -60,24 +60,29 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
     let currentTimestamp = '';
     let currentTextBuffer: string[] = [];
 
-    // Regex explanation:
-    // Group 1: Speaker Name (start of line)
-    // Group 2: Timestamp (MM:SS or HH:MM:SS), optionally wrapped in [], (), or just bare.
-    // Separators: Can be space, colon, or nothing.
+    // Enhanced Regex Patterns for Better Speaker Detection
+
+    // Pattern 1: Universal format with timestamp - "Speaker Name (00:00): text" or "Speaker Name [00:00] text"
     const universalRegex = /^([^\d\n].+?)(?:\s+|:\s*|,\s*)[\(\[]?(\d{1,2}:\d{2}(?::\d{2})?)[\)\]]?\s*(?::|-)?\s*(.*)/;
 
-    // [NEW] Robust Chat Regex for "Name Time Text" format (e.g. "나리 3:30예.네")
-    // Handles cases where text immediately follows time, or tight spacing
+    // Pattern 2: Korean speaker format - "화자1", "참여자1", "면접관" etc with timestamp
+    const koreanSpeakerRegex = /^(화자|참여자|인터뷰어|면접관|응답자|질문자)\s*(\d+)?\s*[\(\[]?(\d{1,2}:\d{2}(?::\d{2})?)[\)\]]?\s*(?::|-|:)?\s*(.*)/;
+
+    // Pattern 3: Tight chat format - "Name 3:30text" (no space between time and text)
     const chatRegex = /^([^\d\n].+?)\s+(\d{1,2}:\d{2})(.*)/;
 
-    // Metadata patterns to explicitly identify as headers
+    // Pattern 4: Simple speaker with timestamp in parentheses - "Speaker (00:00:15)"
+    const speakerParenRegex = /^(.+?)\s*\((\d{1,2}:\d{2}(?::\d{2})?)\)\s*:?\s*(.*)/;
+
+    // Metadata patterns to explicitly identify as headers (not speakers)
     const metadataPatterns = [
         /^\d{4}년/,         // Year start like "2026년"
         /^\d{2}\.\d{2}\.\d{2}/, // Date dot format
         /^\d+분 \d+초/,     // Duration format "31분 43초"
         /^\d+시간/,         // Duration start with hour
         /^\d{1,2}:\d{2}$/,  // Just a time like "7:03"
-        /^녹음녹화/          // Recording label
+        /^녹음녹화/,         // Recording label
+        /^Recording/i       // English recording label
     ];
 
     for (const line of lines) {
@@ -87,12 +92,21 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
         // 1. Check if it's a known metadata line
         const isMetadata = metadataPatterns.some(p => p.test(trimmedLine));
 
-        // 2. Check if it matches the Speaker+Timestamp pattern
-        // Try specific chat regex first, then universal
-        const match = trimmedLine.match(chatRegex) || trimmedLine.match(universalRegex);
+        // 2. Check if it matches any Speaker+Timestamp pattern
+        // Try multiple patterns in order of specificity
+        const match = trimmedLine.match(koreanSpeakerRegex) ||
+            trimmedLine.match(speakerParenRegex) ||
+            trimmedLine.match(chatRegex) ||
+            trimmedLine.match(universalRegex);
 
         if (match && !isMetadata) {
             // It looks like a speaker line AND isn't explicit metadata
+
+            console.log('[DEBUG] Speaker pattern matched:', {
+                line: trimmedLine.substring(0, 50),
+                speaker: match[1],
+                timestamp: match[2] || match[3]
+            });
 
             // Push previous speaker's segment if exists
             if (currentSpeaker && currentTextBuffer.length > 0) {
@@ -106,14 +120,21 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
             }
 
             // Start new speaker segment
-            currentSpeaker = match[1].trim();
-            currentSpeaker = currentSpeaker.replace(/[:()]+$/, '').trim(); // Remove trailing colons
-
-            currentTimestamp = match[2].trim();
-            const restOfLog = match[3] || "";
-            const cleanText = restOfLog.replace(/^[:\s()]+/, ''); // Remove leading colon/space/parentheses from text
-
-            if (cleanText) currentTextBuffer.push(cleanText);
+            // For Korean regex, combine group 1 and 2 (e.g., "화자" + "1")
+            if (trimmedLine.match(koreanSpeakerRegex)) {
+                currentSpeaker = match[1].trim() + (match[2] || '');
+                currentTimestamp = match[3]?.trim() || '00:00';
+                const restOfLog = match[4] || "";
+                const cleanText = restOfLog.replace(/^[:\s()]+/, '');
+                if (cleanText) currentTextBuffer.push(cleanText);
+            } else {
+                currentSpeaker = match[1].trim();
+                currentSpeaker = currentSpeaker.replace(/[:()]+$/, '').trim(); // Remove trailing colons
+                currentTimestamp = match[2]?.trim() || '00:00';
+                const restOfLog = match[3] || "";
+                const cleanText = restOfLog.replace(/^[:\s()]+/, '');
+                if (cleanText) currentTextBuffer.push(cleanText);
+            }
 
         } else if (currentSpeaker) {
             // If we have an active speaker, this is likely a continuation of their speech
@@ -141,14 +162,13 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
                 }
             }
 
-            // No active speaker yet, and didn't match speaker regex -> It's a Header or just raw text
-            headers.push(trimmedLine);
-            // If we really haven't found a speaker yet, maybe treat this line as content for "Unknown"?
-            if (!currentSpeaker && !isMetadata) {
-                // Lazy init "Unknown" speaker to capture unstructured text
-                currentSpeaker = "Transcript";
-                currentTextBuffer.push(trimmedLine);
+            // No active speaker pattern found -> treat as header/metadata
+            // DO NOT automatically create a "Transcript" speaker
+            // This was causing all content to be grouped under one speaker
+            if (!isMetadata) {
+                console.warn('[PARSER WARNING] Line does not match speaker pattern:', trimmedLine.substring(0, 50));
             }
+            headers.push(trimmedLine);
         }
     }
 
@@ -162,14 +182,29 @@ export const parseTranscriptContent = (rawContent: string, title?: string) => {
         });
     }
 
-    // ABSOLUTE FALLBACK: If still no segments, puts everything in one
+    // VALIDATION: Check if we detected multiple speakers
     if (segments.length === 0 && rawContent.trim().length > 0) {
+        console.error('[PARSER ERROR] No speaker patterns detected in transcript. Content length:', rawContent.length);
+        console.error('[PARSER ERROR] First 500 chars:', rawContent.substring(0, 500));
+        console.error('[PARSER ERROR] This usually means the transcript format does not match expected patterns.');
+        console.error('[PARSER ERROR] Expected formats: "Speaker Name (00:00): text" or "화자1 00:00: text"');
+
+        // Create a fallback segment with clear error indication
         segments.push({
-            id: 'seg-fallback',
-            speaker: 'System',
+            id: 'seg-parse-error',
+            speaker: 'PARSE_ERROR_NO_SPEAKERS_DETECTED',
             timestamp: '00:00',
-            text: rawContent
+            text: '⚠️ 파싱 오류: 화자 패턴을 찾을 수 없습니다. 전사 파일 형식을 확인해주세요.\n\n' + rawContent
         });
+    } else if (segments.length > 0) {
+        // Check if all segments have the same speaker (possible parsing issue)
+        const uniqueSpeakers = new Set(segments.map(s => s.speaker));
+        if (uniqueSpeakers.size === 1) {
+            console.warn('[PARSER WARNING] All segments assigned to single speaker:', Array.from(uniqueSpeakers)[0]);
+            console.warn('[PARSER WARNING] This may indicate a parsing issue. Total segments:', segments.length);
+        } else {
+            console.log('[PARSER SUCCESS] Detected', uniqueSpeakers.size, 'unique speakers:', Array.from(uniqueSpeakers));
+        }
     }
 
     return {

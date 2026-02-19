@@ -19,7 +19,7 @@ export function FeedbackRenderer({ feedback, onJump }: Props) {
         }
     }, [feedback]);
 
-    if (!data || !data.score) {
+    if (!data || typeof data.score === 'undefined') {
         // Fallback to Markdown
         return (
             <div className="text-slate-600 leading-relaxed whitespace-pre-line feedback-content">

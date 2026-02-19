@@ -1,4 +1,4 @@
-import { getProject } from '@/lib/store/projects';
+import { getProject, getInterview } from '@/lib/store/projects';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { InterviewReport } from '@/components/InterviewReport';
@@ -14,14 +14,17 @@ interface Props {
 
 export default async function InterviewPage({ params }: Props) {
     const { id, studyId, interviewId } = await params;
-    const data = await getProject(id);
 
+    // Fetch project context
+    const data = await getProject(id);
     if (!data) notFound();
 
     const study = data.studies.find(s => s.id === studyId);
     if (!study) notFound();
 
-    const interview = study.sessions?.find(s => s.id === interviewId);
+    // Fetch FULL interview data (including insights)
+    // getProject returns lightweight interviews with empty insights
+    const interview = await getInterview(interviewId);
     if (!interview) notFound();
 
     const persona = data.personas?.find(p => p.id === interview.participantId);

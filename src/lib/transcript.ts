@@ -15,73 +15,18 @@ export const getTranscriptFiles = async (): Promise<string[]> => {
     }
 };
 
+import { parseTranscriptContent as parseRobust } from './transcript-parser';
+
 export const parseTranscriptContent = (rawContent: string, title: string): Transcript => {
-    // Regex logic to parse segments
-    // Example: Lenny (00:00:36):
-    const segments: TranscriptSegment[] = [];
-    const lines = rawContent.split('\n');
-
-    let currentSpeaker = '';
-    let currentTimestamp = '';
-    let currentTextBuffer: string[] = [];
-
-    const speakerRegex = /^(.+?) \((\d{2}:\d{2}:\d{2})\):/;
-
-    for (const line of lines) {
-        const match = line.match(speakerRegex);
-        if (match) {
-            // If we have a previous segment accumulating, push it
-            if (currentSpeaker && currentTextBuffer.length > 0) {
-                segments.push({
-                    speaker: currentSpeaker,
-                    timestamp: currentTimestamp,
-                    text: currentTextBuffer.join('\n').trim()
-                });
-                currentTextBuffer = [];
-            }
-
-            currentSpeaker = match[1].trim();
-            currentTimestamp = match[2].trim();
-
-            // The rest of the line might be text, or empty
-            const restOfLine = line.substring(match[0].length).trim();
-            if (restOfLine) {
-                currentTextBuffer.push(restOfLine);
-            }
-        } else {
-            // It's a continuation of the previous speaker
-            if (currentSpeaker) {
-                if (line.trim() !== '') {
-                    currentTextBuffer.push(line.trim());
-                }
-            }
-        }
-    }
-
-    // Push the last segment
-    if (currentSpeaker && currentTextBuffer.length > 0) {
-        segments.push({
-            speaker: currentSpeaker,
-            timestamp: currentTimestamp,
-            text: currentTextBuffer.join('\n').trim()
-        });
-    }
-
-    // Fallback: If no segments were parsed (typical for unstructured docs), create one generic segment
-    if (segments.length === 0 && rawContent.trim().length > 0) {
-        segments.push({
-            speaker: 'Unknown',
-            timestamp: '00:00:00',
-            text: rawContent.trim()
-        });
-    }
+    // DEPRECATED LOGIC REPLACED BY ROBUST PARSER
+    const parsed = parseRobust(rawContent, title);
 
     return {
-        id: title, // Use title as ID for now or caller handles it
-        title,
-        headers: [],
-        segments,
-        rawContent
+        id: title, // Maintain backward compatibility for ID
+        title: parsed.title,
+        headers: parsed.headers,
+        segments: parsed.segments,
+        rawContent: parsed.rawContent
     };
 };
 

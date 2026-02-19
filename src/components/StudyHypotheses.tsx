@@ -431,58 +431,7 @@ export function StudyHypotheses({ projectId, studyId, initialQuestions, verifica
                                                     <span>🧠</span> 관련 인터뷰 인사이트 ({relatedInsights.length})
                                                 </h4>
 
-                                                {relatedInsights.length === 0 ? (
-                                                    <div className="space-y-4">
-                                                        <p className="text-[10px] text-slate-400 italic">아직 이 질문과 직접 관련된 인터뷰 기록이 확인되지 않았습니다.</p>
-
-                                                        {/* Fallback: Show Unlinked Insights (Toggle) */}
-                                                        {getRelatedInsights(i, q, true).length > 0 && (
-                                                            <div className="mt-4 pt-3 border-t border-slate-100">
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        const newSet = new Set(unlinkedVisibleSet);
-                                                                        if (newSet.has(i)) newSet.delete(i);
-                                                                        else newSet.add(i);
-                                                                        setUnlinkedVisibleSet(newSet);
-                                                                    }}
-                                                                    className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600 mb-2 transition-colors w-full text-left"
-                                                                >
-                                                                    <span>{unlinkedVisibleSet.has(i) ? '▼' : '▶'}</span>
-                                                                    <span>📌 분류되지 않은 전체 인사이트 ({getRelatedInsights(i, q, true).length})</span>
-                                                                </button>
-
-                                                                {unlinkedVisibleSet.has(i) && (
-                                                                    <div className="space-y-3 opacity-75 animate-in fade-in slide-in-from-top-1 duration-200 pl-2 border-l-2 border-slate-100 mt-2">
-                                                                        {getRelatedInsights(i, q, true).slice(0, 10).map((insight, idx) => (
-                                                                            <div key={`unlinked-${idx}`} className="flex gap-2 items-start border-b border-slate-50 last:border-0 pb-2 last:pb-0">
-                                                                                <div className="shrink-0 mt-0.5">
-                                                                                    <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold">General</span>
-                                                                                </div>
-                                                                                <div className="flex-1 min-w-0">
-                                                                                    <p className="text-[11px] text-slate-700 leading-relaxed font-medium mb-1">
-                                                                                        {insight.content}
-                                                                                    </p>
-                                                                                    <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                                                                                        <span>출처:</span>
-                                                                                        <a href={`/projects/${projectId}/studies/${studyId}/interview/${insight.sessionId}`} className="hover:text-brand-600 underline decoration-slate-200 hover:decoration-brand-300">
-                                                                                            {insight.sessionTitle}
-                                                                                        </a>
-                                                                                    </p>
-                                                                                </div>
-                                                                            </div>
-                                                                        ))}
-                                                                        {getRelatedInsights(i, q, true).length > 10 && (
-                                                                            <p className="text-[10px] text-slate-400 text-center italic">
-                                                                                ... and {getRelatedInsights(i, q, true).length - 10} more items
-                                                                            </p>
-                                                                        )}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
+                                                {relatedInsights.length > 0 && (
                                                     <div className="space-y-3">
                                                         {relatedInsights.map((insight, idx) => (
                                                             <div key={idx} className="flex gap-2 items-start border-b border-slate-50 last:border-0 pb-2 last:pb-0">
@@ -514,6 +463,53 @@ export function StudyHypotheses({ projectId, studyId, initialQuestions, verifica
                                                                 </div>
                                                             </div>
                                                         ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Always Show Unlinked Insights Toggle if available */}
+                                                {getRelatedInsights(i, q, true).length > 0 && (
+                                                    <div className={`mt-4 pt-3 ${relatedInsights.length > 0 ? 'border-t border-slate-100' : ''}`}>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const newSet = new Set(unlinkedVisibleSet);
+                                                                if (newSet.has(i)) newSet.delete(i);
+                                                                else newSet.add(i);
+                                                                setUnlinkedVisibleSet(newSet);
+                                                            }}
+                                                            className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600 mb-2 transition-colors w-full text-left"
+                                                        >
+                                                            <span>{unlinkedVisibleSet.has(i) ? '▼' : '▶'}</span>
+                                                            <span>📌 분류되지 않은 전체 인사이트 ({getRelatedInsights(i, q, true).length})</span>
+                                                        </button>
+
+                                                        {unlinkedVisibleSet.has(i) && (
+                                                            <div className="space-y-3 opacity-75 animate-in fade-in slide-in-from-top-1 duration-200 pl-2 border-l-2 border-slate-100 mt-2">
+                                                                {getRelatedInsights(i, q, true).slice(0, 10).map((insight, idx) => (
+                                                                    <div key={`unlinked-${idx}`} className="flex gap-2 items-start border-b border-slate-50 last:border-0 pb-2 last:pb-0">
+                                                                        <div className="shrink-0 mt-0.5">
+                                                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold">General</span>
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="text-[11px] text-slate-700 leading-relaxed font-medium mb-1">
+                                                                                {insight.content}
+                                                                            </p>
+                                                                            <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                                                                                <span>출처:</span>
+                                                                                <a href={`/projects/${projectId}/studies/${studyId}/interview/${insight.sessionId}`} className="hover:text-brand-600 underline decoration-slate-200 hover:decoration-brand-300">
+                                                                                    {insight.sessionTitle}
+                                                                                </a>
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                                {getRelatedInsights(i, q, true).length > 10 && (
+                                                                    <p className="text-[10px] text-slate-400 text-center italic">
+                                                                        ... and {getRelatedInsights(i, q, true).length - 10} more items
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
 

@@ -6,12 +6,20 @@ import { getProject, saveProjectData } from '@/lib/store/projects';
 import { revalidatePath } from 'next/cache';
 import { RealInterview, WeeklyReport } from '@/lib/types';
 
+import { supabase } from '@/lib/supabase';
+
 export async function reanalyzeInterviewAction(projectId: string, studyId: string, interviewId: string) {
+    console.log(`[Reanalyze] Starting for Project: ${projectId}, Study: ${studyId}, Interview: ${interviewId}`);
     const data = await getProject(projectId);
-    if (!data) return;
+    if (!data) {
+        console.error("[Reanalyze] Project not found");
+        return;
+    }
 
     const studyIndex = data.studies.findIndex(s => s.id === studyId);
     if (studyIndex === -1) return;
+
+    /* REORDERED: Deletion happens AFTER analysis */
 
     const interviewIndex = data.studies[studyIndex].sessions.findIndex(s => s.id === interviewId);
     if (interviewIndex === -1) return;
@@ -33,9 +41,24 @@ export async function reanalyzeInterviewAction(projectId: string, studyId: strin
         researchQuestions: data.studies[studyIndex].plan.researchQuestions
     };
 
+    if (!transcriptObj.rawContent || transcriptObj.rawContent.trim().length === 0) {
+        console.error("[Reanalyze] Transcript is empty");
+        throw new Error("Transcript is empty. Please upload a transcript or audio file first.");
+    }
+
+    console.log(`[Reanalyze] Transcript found. Length: ${transcriptObj.rawContent.length}. Calling analyzeTranscript...`);
     const result = await analyzeTranscript(transcriptObj, contextObj);
+    console.log(`[Reanalyze] Analysis complete. Result: ${result ? 'Success' : 'Failure'}`);
 
     if (result) {
+        // CLEAR EXISTING INSIGHTS: Fix for persistence issue (MOVED HERE: Only clear if analysis succeeded)
+        const { error: deleteError } = await supabase.from('insights').delete().eq('interview_id', interviewId);
+        if (deleteError) {
+            console.error("Failed to clear old insights:", deleteError);
+        } else {
+            console.log(`[Reanalyze] Cleared old insights for interview ${interviewId}`);
+        }
+
         data.studies[studyIndex].sessions[interviewIndex].structuredData = result.insights;
 
         const currentSummary = data.studies[studyIndex].sessions[interviewIndex].summary;
@@ -46,10 +69,17 @@ export async function reanalyzeInterviewAction(projectId: string, studyId: strin
 
         if (isPlaceholder) {
             data.studies[studyIndex].sessions[interviewIndex].summary = result.summary;
+            console.log("[Reanalyze] Updated summary.");
         }
 
         await saveProjectData(data);
+        console.log("[Reanalyze] Project data saved successfully.");
         revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
+        console.log("[Reanalyze] Path revalidated.");
+    } else {
+        console.error(`[Reanalyze] Analysis failed for interview ${interviewId}. Old data preserved.`);
+        // Ideally we should throw error to let UI know
+        throw new Error("Analysis failed to return results");
     }
 }
 
@@ -172,6 +202,10 @@ export async function generateFeedbackAction(projectId: string, studyId: string,
     };
 
     try {
+        if (!transcriptObj.rawContent || transcriptObj.rawContent.trim().length === 0) {
+            throw new Error("Transcript is empty. Please upload a transcript or audio file first.");
+        }
+
         console.log("[FeedbackAction] Calling generateInterviewerFeedback...");
         const feedback = await generateInterviewerFeedback(transcriptObj, discussionGuideList, {
             projectTitle: data.project.title,
@@ -180,10 +214,13 @@ export async function generateFeedbackAction(projectId: string, studyId: string,
         });
         console.log("[FeedbackAction] Feedback generated successfully. Length:", feedback.length);
 
-        interview.interviewerFeedback = feedback;
+        console.log("[FeedbackAction] Feedback generated successfully. Length:", feedback.length);
 
-        await saveProjectData(data);
-        console.log("[FeedbackAction] Project data saved.");
+        // DIRECT DB UPDATE: Safer than saveProjectData
+        const { updateInterviewFeedback } = await import('@/lib/store/projects');
+        await updateInterviewFeedback(interview.id, feedback);
+
+        console.log("[FeedbackAction] Feedback saved to DB directly.");
 
         revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
     } catch (e: any) {
