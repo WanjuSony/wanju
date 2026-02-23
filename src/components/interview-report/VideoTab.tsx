@@ -39,7 +39,11 @@ export function VideoTab({
     const [embedInput, setEmbedInput] = useState('');
 
     const activeEmbedUrl = videoUrl ? getEmbedUrl(videoUrl) : null;
-    const isLocalVideo = videoUrl && videoUrl.startsWith('/uploads');
+    const isLocalVideo = videoUrl && (
+        videoUrl.startsWith('/uploads') ||
+        videoUrl.includes('supabase.co/storage') ||
+        videoUrl.match(/\.(mp4|webm|mov|ogg)$/i) !== null
+    );
 
     return (
         <div className="flex-1 bg-slate-50 relative flex flex-col">
