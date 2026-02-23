@@ -6,8 +6,7 @@ import { useState, useTransition, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { reanalyzeInterviewAction, addManualInsightAction, generateSummaryAction, generateFeedbackAction, createPersonaFromInterviewAction, uploadInterviewVideoAction, uploadInterviewAudioAction, saveInterviewVideoUrlAction, autoTranscribeMediaAction, uploadInterviewTranscriptAction, updateSpeakerInfoAction, linkPersonaToInterviewAction, updateInterviewNoteAction, updatePersonaAction, deleteInsightAction, updateInsightAction, updateInsightOrderAction, updateInterviewHypothesisReviewAction, deleteSpeakerAction, getInterviewAction } from '@/app/actions';
-
-// ... (existing imports)
+import { supabase } from '@/lib/supabase';
 
 
 import { PersonaDetail } from './PersonaDetail';
@@ -407,18 +406,23 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         if (!file) return;
 
         setIsUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
         try {
+            const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+            const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
+            if (error) throw new Error("음성 파일 업로드 실패: " + error.message);
+            const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+
+            const formData = new FormData();
+            formData.append('fileUrl', data.publicUrl);
             const updatedInterview = await uploadInterviewAudioAction(projectId, studyId, interview.id, formData);
             if (updatedInterview) {
                 setInterview(updatedInterview as any);
             }
             alert('녹음 파일이 등록되었습니다.');
             router.refresh();
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert('업로드 실패');
+            alert('업로드 실패: ' + (error.message || '알 수 없는 오류'));
         } finally {
             setIsUploading(false);
         }
@@ -429,18 +433,23 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         if (!file) return;
 
         setIsUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
         try {
+            const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+            const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
+            if (error) throw new Error("비디오 파일 업로드 실패: " + error.message);
+            const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+
+            const formData = new FormData();
+            formData.append('fileUrl', data.publicUrl);
             const updatedInterview = await uploadInterviewVideoAction(projectId, studyId, interview.id, formData);
             if (updatedInterview) {
                 setInterview(updatedInterview as any);
             }
             alert('비디오 파일이 등록되었습니다.');
             router.refresh();
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert('업로드 실패');
+            alert('업로드 실패: ' + (error.message || '알 수 없는 오류'));
         } finally {
             setIsUploading(false);
         }
