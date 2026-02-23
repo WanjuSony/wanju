@@ -14,12 +14,16 @@ export async function uploadFileWithTus(bucketName: string, file: File | Blob, f
         throw new Error('Missing Supabase credentials for TUS upload.');
     }
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || supabaseAnonKey;
+
     return new Promise((resolve, reject) => {
         const upload = new tus.Upload(file, {
             endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
             retryDelays: [0, 3000, 5000, 10000, 20000],
             headers: {
-                Authorization: `Bearer ${supabaseAnonKey}`,
+                Authorization: `Bearer ${token}`,
+                apikey: supabaseAnonKey,
                 'x-upsert': 'true', // overwrite if exists
             },
             uploadDataDuringCreation: true,
