@@ -39,6 +39,7 @@ export default function LiveInterviewManager({ projectId, studyId, guideBlocks, 
     // Note State: map blockId to string note
     const [notes, setNotes] = useState<Record<string, string>>({});
     const [isSaving, setIsSaving] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
     // Timer Logic
     useEffect(() => {
@@ -169,7 +170,8 @@ export default function LiveInterviewManager({ projectId, studyId, guideBlocks, 
             if (blob.size > 0) {
                 let publicUrl = '';
                 if (file.size > 6 * 1024 * 1024) {
-                    publicUrl = await uploadFileWithTus('uploads', file, fileName);
+                    setUploadProgress(0);
+                    publicUrl = await uploadFileWithTus('uploads', file, fileName, (p) => setUploadProgress(p));
                     formData.append('audioUrl', publicUrl);
                 } else {
                     const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
@@ -201,6 +203,7 @@ export default function LiveInterviewManager({ projectId, studyId, guideBlocks, 
             console.error(error);
             alert('저장 중 오류가 발생했습니다.');
             setIsSaving(false);
+            setUploadProgress(null);
         }
     };
 
@@ -239,9 +242,17 @@ export default function LiveInterviewManager({ projectId, studyId, guideBlocks, 
                     <button
                         onClick={handleFinish}
                         disabled={isSaving}
-                        className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-black text-sm hover:bg-slate-800 disabled:opacity-50 transition shadow-lg"
+                        className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-black text-sm hover:bg-slate-800 disabled:opacity-50 transition shadow-lg relative overflow-hidden min-w-[120px]"
                     >
-                        {isSaving ? '저장 중...' : '종료 및 저장'}
+                        {uploadProgress !== null && (
+                            <div
+                                className="absolute top-0 left-0 h-full bg-indigo-500/50 transition-all duration-300"
+                                style={{ width: `${uploadProgress}%` }}
+                            />
+                        )}
+                        <span className="relative z-10">
+                            {isSaving ? (uploadProgress !== null ? `저장 중... ${uploadProgress}%` : '저장 중...') : '종료 및 저장'}
+                        </span>
                     </button>
                 </div>
             </div>

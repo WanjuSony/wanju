@@ -107,7 +107,20 @@ export function StudyHeader({ projectTitle, study }: Props) {
                     studyId={study.id}
                     initialQuestions={study.plan.researchQuestions || []}
                     verifications={study.plan.hypothesisVerifications}
-                    sessions={study.sessions}
+                    sessions={[
+                        ...study.sessions,
+                        ...(study.simulationSessions || []).map(sim => ({
+                            id: sim.id,
+                            projectId: study.projectId,
+                            studyId: study.id,
+                            title: `Simulation (${sim.id.slice(0, 4)})`,
+                            date: sim.createdAt,
+                            transcriptId: '',
+                            structuredData: sim.structuredData || [],
+                            participants: [],
+                            speakers: []
+                        } as any))
+                    ]}
                 />
             </div>
         </header>

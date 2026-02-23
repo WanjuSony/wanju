@@ -65,27 +65,39 @@ export function InsightsTab({
                     {(() => {
                         const grouped: Record<string, StructuredInsight[]> = {};
 
-                        // Helper to normalize "RQ1", "RQ 1" -> "RQ 1"
-                        const normalizeRq = (key: string) => {
+                        // Helper to find the index of a research question if the LLM output the exact string
+                        const findRqIndex = (key: string) => {
+                            const exactIndex = researchQuestions.findIndex(q => q.trim().toLowerCase() === key.trim().toLowerCase());
+                            if (exactIndex !== -1) return exactIndex;
+
+                            // Fallback to RQ1 notation match
                             const match = key.match(/RQ\s?(\d+)/i);
                             if (match) {
-                                return `RQ ${parseInt(match[1])}`;
+                                return parseInt(match[1]) - 1;
                             }
-                            return key;
+                            return -1;
                         };
 
                         findings.forEach(f => {
                             const rawKey = f.researchQuestion || 'General';
-                            const rqKey = normalizeRq(rawKey);
+                            let rqKey = 'General';
+
+                            const idx = findRqIndex(rawKey);
+                            if (idx !== -1 && researchQuestions[idx]) {
+                                rqKey = `RQ ${idx + 1}`;
+                            } else if (rawKey !== 'General') {
+                                // If it didn't match any index but is not General, keep it as its own bucket
+                                rqKey = rawKey;
+                            }
 
                             if (!grouped[rqKey]) grouped[rqKey] = [];
                             grouped[rqKey].push(f);
                         });
 
-                        // Sort keys to ensure RQ 1, RQ 2, etc order (numeric sort)
+                        // Sort keys to ensure RQ 1, RQ 2, etc order (numeric sort). Non-RQ keys go to the end.
                         const sortedKeys = Object.keys(grouped).sort((a, b) => {
-                            const numA = parseInt(a.replace(/\D/g, '')) || 999;
-                            const numB = parseInt(b.replace(/\D/g, '')) || 999;
+                            const numA = a.startsWith('RQ ') ? parseInt(a.replace(/\D/g, '')) : (a === 'General' ? 9999 : 1000);
+                            const numB = b.startsWith('RQ ') ? parseInt(b.replace(/\D/g, '')) : (b === 'General' ? 9999 : 1000);
                             return numA - numB;
                         });
 

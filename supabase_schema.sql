@@ -11,7 +11,8 @@ create table projects (
   status text default 'planning',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  "order" integer default -1
+  "order" integer default -1,
+  documents jsonb -- Added documents column to hold uploaded files
 );
 
 -- 2. Personas Table
@@ -30,6 +31,7 @@ create table studies (
   project_id text references projects(id) on delete cascade not null,
   title text not null,
   description text,
+  status text default 'planning', -- Added status column
   questions jsonb, -- Storing list of questions as JSON array for simplicity
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );

@@ -22,9 +22,10 @@ interface Props {
     personas: Persona[]; // Available cast for this study
     guide: GuideBlock[];
     initialSession?: SimulationSession;
+    researchQuestions?: string[];
 }
 
-export function SimulationChat({ projectId, studyId, personas, guide, initialSession }: Props) {
+export function SimulationChat({ projectId, studyId, personas, guide, initialSession, researchQuestions = [] }: Props) {
     const router = useRouter();
     const [step, setStep] = useState<'selection' | 'chat'>(initialSession ? 'chat' : 'selection');
     const [selectedPersonaId, setSelectedPersonaId] = useState<string>(initialSession?.personaId || '');
@@ -475,47 +476,85 @@ export function SimulationChat({ projectId, studyId, personas, guide, initialSes
                                 <div className="space-y-4">
                                     {(() => {
                                         const grouped: Record<string, StructuredInsight[]> = {};
+
+                                        const findRqIndex = (key: string) => {
+                                            const exactIndex = researchQuestions.findIndex(q => q.trim().toLowerCase() === key.trim().toLowerCase());
+                                            if (exactIndex !== -1) return exactIndex;
+                                            const match = key.match(/RQ\s?(\d+)/i);
+                                            if (match) return parseInt(match[1]) - 1;
+                                            return -1;
+                                        };
+
                                         analysisResult.insights.forEach(f => {
-                                            const rq = f.researchQuestion || 'General';
-                                            if (!grouped[rq]) grouped[rq] = [];
-                                            grouped[rq].push(f);
+                                            const rawKey = f.researchQuestion || 'General';
+                                            let rqKey = 'General';
+
+                                            const idx = findRqIndex(rawKey);
+                                            if (idx !== -1 && researchQuestions[idx]) {
+                                                rqKey = `RQ ${idx + 1}`;
+                                            } else if (rawKey !== 'General') {
+                                                rqKey = rawKey;
+                                            }
+
+                                            if (!grouped[rqKey]) grouped[rqKey] = [];
+                                            grouped[rqKey].push(f);
                                         });
 
-                                        return Object.entries(grouped).map(([rq, items], idx) => (
-                                            <div key={idx} className="space-y-2">
-                                                <div className="text-[10px] font-black text-brand-600 uppercase tracking-widest breadcrumb-divider flex items-center gap-2">
-                                                    <div className="h-px bg-brand-100 flex-1"></div>
-                                                    <span>{rq}</span>
-                                                    <div className="h-px bg-brand-100 flex-1"></div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {items.map(item => (
-                                                        <div key={item.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm hover:border-brand-200 transition-colors">
-                                                            <div className="flex gap-2">
-                                                                <div className={`w-1 rounded-full flex-shrink-0 ${item.type === 'insight' ? 'bg-brand-500' :
-                                                                    item.type === 'action' ? 'bg-emerald-500' : 'bg-slate-300'
-                                                                    }`}></div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="text-sm font-bold text-slate-800 leading-snug">
-                                                                        {item.content}
+                                        const sortedKeys = Object.keys(grouped).sort((a, b) => {
+                                            const numA = a.startsWith('RQ ') ? parseInt(a.replace(/\D/g, '')) : (a === 'General' ? 9999 : 1000);
+                                            const numB = b.startsWith('RQ ') ? parseInt(b.replace(/\D/g, '')) : (b === 'General' ? 9999 : 1000);
+                                            return numA - numB;
+                                        });
+
+                                        return sortedKeys.map((rqKey, idx) => {
+                                            let displayText = rqKey;
+                                            const rqMatch = rqKey.match(/RQ\s?(\d+)/i);
+                                            if (rqMatch && researchQuestions.length > 0) {
+                                                const matchIdx = parseInt(rqMatch[1]) - 1;
+                                                if (researchQuestions[matchIdx]) {
+                                                    displayText = `${rqKey}. ${researchQuestions[matchIdx]}`;
+                                                }
+                                            }
+
+                                            // Extract the items for this rqKey
+                                            const items = grouped[rqKey];
+
+                                            return (
+                                                <div key={idx} className="space-y-2">
+                                                    <div className="text-[10px] font-black text-brand-600 uppercase tracking-widest breadcrumb-divider flex items-center gap-2">
+                                                        <div className="h-px bg-brand-100 flex-1"></div>
+                                                        <span className="truncate max-w-[80%]" title={displayText}>{displayText}</span>
+                                                        <div className="h-px bg-brand-100 flex-1"></div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {items.map(item => (
+                                                            <div key={item.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm hover:border-brand-200 transition-colors">
+                                                                <div className="flex gap-2">
+                                                                    <div className={`w-1 rounded-full flex-shrink-0 ${item.type === 'insight' ? 'bg-brand-500' :
+                                                                        item.type === 'action' ? 'bg-emerald-500' : 'bg-slate-300'
+                                                                        }`}></div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="text-sm font-bold text-slate-800 leading-snug">
+                                                                            {item.content}
+                                                                        </div>
+                                                                        {item.meaning && (
+                                                                            <div className="text-xs text-slate-500 mt-1 pl-2 border-l-2 border-slate-50">
+                                                                                {item.meaning}
+                                                                            </div>
+                                                                        )}
+                                                                        {item.recommendation && (
+                                                                            <div className="text-xs text-emerald-600 mt-2 font-medium bg-emerald-50 p-2 rounded">
+                                                                                💡 {item.recommendation}
+                                                                            </div>
+                                                                        )}
                                                                     </div>
-                                                                    {item.meaning && (
-                                                                        <div className="text-xs text-slate-500 mt-1 pl-2 border-l-2 border-slate-50">
-                                                                            {item.meaning}
-                                                                        </div>
-                                                                    )}
-                                                                    {item.recommendation && (
-                                                                        <div className="text-xs text-emerald-600 mt-2 font-medium bg-emerald-50 p-2 rounded">
-                                                                            💡 {item.recommendation}
-                                                                        </div>
-                                                                    )}
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    ))}
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ));
+                                            );
+                                        });
                                     })()}
                                 </div>
                             </div>

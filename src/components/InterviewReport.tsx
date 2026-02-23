@@ -379,6 +379,7 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
     const [videoTabMode, setVideoTabMode] = useState<'upload' | 'embed'>('upload');
     const [embedInput, setEmbedInput] = useState('');
     const [isChangingVideo, setIsChangingVideo] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
     const handleUploadTranscript = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -412,7 +413,8 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
             let publicUrl = '';
 
             if (file.size > 6 * 1024 * 1024) {
-                publicUrl = await uploadFileWithTus('uploads', file, fileName);
+                setUploadProgress(0);
+                publicUrl = await uploadFileWithTus('uploads', file, fileName, (p) => setUploadProgress(p));
             } else {
                 const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
                 if (error) throw new Error("음성 파일 업로드 실패: " + error.message);
@@ -433,6 +435,7 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
             alert('업로드 실패: ' + (error.message || '알 수 없는 오류'));
         } finally {
             setIsUploading(false);
+            setUploadProgress(null);
         }
     };
 
@@ -446,7 +449,8 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
             let publicUrl = '';
 
             if (file.size > 6 * 1024 * 1024) {
-                publicUrl = await uploadFileWithTus('uploads', file, fileName);
+                setUploadProgress(0);
+                publicUrl = await uploadFileWithTus('uploads', file, fileName, (p) => setUploadProgress(p));
             } else {
                 const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
                 if (error) throw new Error("비디오 파일 업로드 실패: " + error.message);
@@ -467,6 +471,7 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
             alert('업로드 실패: ' + (error.message || '알 수 없는 오류'));
         } finally {
             setIsUploading(false);
+            setUploadProgress(null);
         }
     };
 
@@ -859,6 +864,7 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
                                 handleUploadAudio={handleUploadAudio}
                                 handleUploadTranscript={handleUploadTranscript}
                                 isUploading={isUploading}
+                                uploadProgress={uploadProgress}
                                 currentSegmentIndex={currentSegmentIndex}
                                 handleJumpToTimestamp={handleJumpToTimestamp}
                                 handleAutoTranscribeClick={handleAutoTranscribeClick}
@@ -879,6 +885,7 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
                             handleSaveVideoUrl={handleSaveVideoUrl}
                             handleUploadVideo={handleUploadVideo}
                             isUploading={isUploading}
+                            uploadProgress={uploadProgress}
                             videoRef={videoRef}
                         />
                     )}

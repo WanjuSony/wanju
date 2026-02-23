@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { Project, ProjectData, Persona, ResearchStudy, RealInterview, StructuredInsight, KnowledgeDocument, WeeklyReport, ChatSession } from '../types';
+import { Project, ProjectData, Persona, ResearchStudy, RealInterview, StructuredInsight, KnowledgeDocument, WeeklyReport, ChatSession, SimulationSession } from '../types';
 
 // Helper to map DB rows to Types
 // Note: JSONB columns are returned as objects, so we cast them.
@@ -41,9 +41,11 @@ export async function getProject(id: string): Promise<ProjectData | null> {
             studies (
                 *,
                 interviews (
-                    id, title, date, start_time, end_time, summary, recording_url, participants, participant_id, sort_order, interviewer_feedback, transcript, segments
+                    *,
+                    insights (*)
                 ),
-                reports (*)
+                reports (*),
+                simulation_sessions (*)
             ),
             chat_sessions (*)
         `)
@@ -51,7 +53,7 @@ export async function getProject(id: string): Promise<ProjectData | null> {
         .single();
 
     if (error || !projectData) {
-        console.error('Error fetching project:', error);
+        console.error('Error fetching project:', error?.message || 'Unknown error', error?.details || '');
         return null;
     }
 
@@ -74,7 +76,18 @@ export async function getProject(id: string): Promise<ProjectData | null> {
             .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
             .map((interviewRow: any) => {
                 // Map Insights
-                const structuredData: StructuredInsight[] = []; // Insights are now fetched on-demand for performance
+                const structuredData: StructuredInsight[] = (interviewRow.insights || []).map((r: any) => ({
+                    id: r.id,
+                    type: r.type,
+                    content: r.content,
+                    source: r.source || 'ai',
+                    evidence: r.evidence,
+                    importance: r.importance,
+                    meaning: r.meaning,
+                    recommendation: r.recommendation,
+                    researchQuestion: r.research_question,
+                    sourceSegmentId: r.source_segment_id
+                }));
 
                 return {
                     id: interviewRow.id,
@@ -110,6 +123,24 @@ export async function getProject(id: string): Promise<ProjectData | null> {
             content: r.content
         }));
 
+        // Map Simulation Sessions
+        const simulationSessions: SimulationSession[] = (studyRow.simulation_sessions || []).map((sim: any) => {
+            try {
+                return {
+                    id: sim.id,
+                    personaId: sim.persona_id,
+                    createdAt: sim.created_at,
+                    messages: sim.messages || [],
+                    insights: sim.insights || undefined,
+                    summary: sim.summary || undefined,
+                    structuredData: sim.structured_data || undefined
+                };
+            } catch (err) {
+                console.error("Error mapping simulation session:", err);
+                return null;
+            }
+        }).filter(Boolean) as SimulationSession[];
+
         return {
             id: studyRow.id,
             projectId: id,
@@ -123,7 +154,8 @@ export async function getProject(id: string): Promise<ProjectData | null> {
                 ...studyRow.questions
             },
             sessions,
-            reports, // Add reports
+            simulationSessions, // Attach simulation sessions
+            reports, // Attach reports
             discussionGuide: studyRow.questions?.discussionGuide || [],
             participantIds: [],
             changeLogs: []
@@ -178,7 +210,7 @@ export async function createProject(title: string, description: string, goal: st
 
 export async function saveProjectData(data: ProjectData): Promise<void> {
     // 1. Upsert Project
-    await supabase.from('projects').upsert({
+    const { error: projectError } = await supabase.from('projects').upsert({
         id: data.project.id,
         title: data.project.title,
         description: data.project.description,
@@ -188,10 +220,14 @@ export async function saveProjectData(data: ProjectData): Promise<void> {
         documents: data.project.documents,
         updated_at: new Date().toISOString()
     });
+    if (projectError) {
+        console.error("Failed to upsert project:", projectError);
+        throw new Error(`Failed to upsert project: ${projectError.message}`);
+    }
 
     // 2. Upsert Personas
     for (const p of data.personas) {
-        await supabase.from('personas').upsert({
+        const { error: personaError } = await supabase.from('personas').upsert({
             id: p.id,
             project_id: data.project.id,
             name: p.name,
@@ -199,18 +235,29 @@ export async function saveProjectData(data: ProjectData): Promise<void> {
             avatar: p.avatar,
             characteristics: p // Storing full object in jsonb
         });
+        if (personaError) {
+            console.error("Failed to upsert persona:", personaError);
+            throw new Error(`Failed to upsert persona: ${personaError.message}`);
+        }
     }
 
     // 3. Upsert Studies
     for (const s of data.studies) {
-        await supabase.from('studies').upsert({
+        const studyPayload = {
             id: s.id,
             project_id: data.project.id,
             title: s.title,
             description: s.plan.purpose,
             status: s.status,
             questions: { ...s.plan, discussionGuide: s.discussionGuide } // Storing complex plan in jsonb
-        });
+        };
+        console.log("Upserting Study Payload: ", JSON.stringify(studyPayload, null, 2));
+
+        const { error: studyError } = await supabase.from('studies').upsert(studyPayload);
+        if (studyError) {
+            console.error("Failed to upsert study:", studyError);
+            throw new Error(`Failed to upsert study: ${studyError.message}`);
+        }
 
         // 4. Upsert Interviews (Sessions)
         for (const i of s.sessions) {
@@ -263,6 +310,21 @@ export async function saveProjectData(data: ProjectData): Promise<void> {
                 interview_ids: r.interviewIds
             });
         }
+
+        // 7. Upsert Simulation Sessions
+        for (const sim of (s.simulationSessions || [])) {
+            await supabase.from('simulation_sessions').upsert({
+                id: sim.id,
+                study_id: s.id,
+                project_id: data.project.id,
+                persona_id: sim.personaId,
+                created_at: sim.createdAt,
+                messages: sim.messages,
+                insights: sim.insights,
+                summary: sim.summary,
+                structured_data: sim.structuredData
+            });
+        }
     }
 }
 
@@ -271,7 +333,11 @@ export async function deleteProject(id: string): Promise<void> {
 }
 
 export async function deleteStudy(id: string): Promise<void> {
-    await supabase.from('studies').delete().eq('id', id);
+    const { error } = await supabase.from('studies').delete().eq('id', id);
+    if (error) {
+        console.error("Failed to delete study:", error);
+        throw new Error(`Failed to delete study: ${error.message}`);
+    }
 }
 
 export async function deleteInterview(id: string): Promise<void> {

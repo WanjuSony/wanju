@@ -96,11 +96,12 @@ export async function analyzeSimulationAction(projectId: string, studyId: string
     const contextObj = {
         projectTitle: data.project.title,
         projectDescription: data.project.description || '',
-        methodologies: ['simulation']
+        methodologies: ['simulation'], // Not strictly needed, but good for context
+        researchQuestions: study.plan?.researchQuestions || []
     };
 
     const analysis = await analyzeSimulation(session.messages, contextObj);
-    session.structuredData = analysis.insights;
+    session.structuredData = analysis.insights; // Store structured array
     session.summary = analysis.summary;
 
     await saveProjectData(data);
@@ -117,7 +118,8 @@ export async function analyzeMessagesAction(projectId: string, studyId: string, 
     const contextObj = {
         projectTitle: data.project.title,
         projectDescription: data.project.description || '',
-        methodologies: ['simulation']
+        methodologies: ['simulation'],
+        researchQuestions: study.plan?.researchQuestions || []
     };
 
     const analysis = await analyzeSimulation(messages, contextObj);

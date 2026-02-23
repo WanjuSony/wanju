@@ -107,12 +107,13 @@ async function identifyBestGeminiModel(apiKey: string, preferPro: boolean = fals
     }
 }
 
-export async function getGeminiModel(apiKey: string, preferPro: boolean = false) {
+export async function getGeminiModel(apiKey: string, preferPro: boolean = false, systemInstruction?: string) {
     const modelName = await identifyBestGeminiModel(apiKey, preferPro);
 
     const genAI = new GoogleGenerativeAI(apiKey);
     return genAI.getGenerativeModel({
         model: modelName,
+        systemInstruction,
         safetySettings: [
             { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },

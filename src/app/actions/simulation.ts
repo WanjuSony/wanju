@@ -136,10 +136,14 @@ export async function saveSimulationAction(projectId: string, studyId: string, s
         data.studies[studyIndex].simulationSessions = [];
     }
 
-    data.studies[studyIndex].simulationSessions!.push({
-        ...session,
-        id: Date.now().toString()
-    });
+    const sessions = data.studies[studyIndex].simulationSessions!;
+    const existingIndex = sessions.findIndex(s => s.id === session.id);
+
+    if (existingIndex >= 0) {
+        sessions[existingIndex] = session;
+    } else {
+        sessions.push(session);
+    }
 
     await saveProjectData(data);
     revalidatePath(`/projects/${projectId}/studies/${studyId}`);

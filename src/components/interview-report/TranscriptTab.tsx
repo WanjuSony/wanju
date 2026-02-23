@@ -22,6 +22,7 @@ interface TranscriptTabProps {
     handleUploadAudio: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleUploadTranscript: (e: React.ChangeEvent<HTMLInputElement>) => void;
     isUploading: boolean;
+    uploadProgress: number | null;
     currentSegmentIndex: number;
     handleJumpToTimestamp: (ref: string) => void;
     handleAutoTranscribeClick: () => void;
@@ -55,6 +56,7 @@ export function TranscriptTab({
     handleUploadAudio,
     handleUploadTranscript,
     isUploading,
+    uploadProgress,
     currentSegmentIndex,
     handleJumpToTimestamp,
     handleAutoTranscribeClick,
@@ -124,13 +126,22 @@ export function TranscriptTab({
                     )}
 
                     {!interview.audioUrl && (
-                        <label className={`inline-flex items-center gap-2 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full text-[10px] font-bold cursor-pointer transition shadow-sm ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                            {isUploading ? '...' : (
-                                <>
-                                    <span className="text-sm">🎙️</span>
-                                    <span>녹음 추가</span>
-                                </>
+                        <label className={`inline-flex items-center gap-2 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full text-[10px] font-bold cursor-pointer transition shadow-sm relative overflow-hidden ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}>
+                            {/* Progress bar background */}
+                            {uploadProgress !== null && (
+                                <div
+                                    className="absolute top-0 left-0 h-full bg-indigo-200/50 transition-all duration-300"
+                                    style={{ width: `${uploadProgress}%` }}
+                                />
                             )}
+                            <span className="relative z-10 flex items-center gap-2">
+                                {isUploading ? (uploadProgress !== null ? `업로드 중... ${uploadProgress}%` : '업로드 중...') : (
+                                    <>
+                                        <span className="text-sm">🎙️</span>
+                                        <span>녹음 추가</span>
+                                    </>
+                                )}
+                            </span>
                             <input
                                 type="file"
                                 accept=".mp3,.wav,.m4a"

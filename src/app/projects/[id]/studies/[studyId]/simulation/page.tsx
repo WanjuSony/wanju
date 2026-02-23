@@ -36,6 +36,7 @@ export default async function NewSimulationPage({ params }: Props) {
                     studyId={studyId}
                     personas={data.personas || []}
                     guide={study.discussionGuide || []}
+                    researchQuestions={study.plan.researchQuestions || []}
                 />
             </main>
         </div>

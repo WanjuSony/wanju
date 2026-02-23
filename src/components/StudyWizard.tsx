@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { createStudyAction } from '@/app/actions';
 import { StudyPlan, Persona } from '@/lib/types';
 import { useRouter } from 'next/navigation';
@@ -11,6 +11,8 @@ interface Props {
 }
 
 export default function StudyWizard({ projectId, availablePersonas }: Props) {
+    const router = useRouter();
+    const [isPending, startTransition] = useTransition();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [title, setTitle] = useState(''); // New State for Title
@@ -41,10 +43,17 @@ export default function StudyWizard({ projectId, availablePersonas }: Props) {
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            await createStudyAction(projectId, title, formData, []); // Pass title and empty array for personas
-        } catch (e) {
-            console.error(e);
-            alert("Failed to create study");
+            const newStudyId = await createStudyAction(projectId, title, formData, []); // Pass title and empty array for personas
+            if (newStudyId) {
+                startTransition(() => {
+                    router.push(`/projects/${projectId}/studies/${newStudyId}/guide`);
+                });
+            } else {
+                throw new Error("Failed to get new study ID");
+            }
+        } catch (e: any) {
+            console.error("Study creation error:", e);
+            alert(`Failed to create study: ${e.message || 'Unknown error'}`);
             setLoading(false);
         }
     };

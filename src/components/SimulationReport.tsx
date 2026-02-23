@@ -3,17 +3,18 @@
 import { useState } from 'react';
 import { SimulationSession, Persona } from '@/lib/types';
 import { analyzeSimulationAction } from '@/app/actions';
-import ReactMarkdown from 'react-markdown';
 import { useRouter } from 'next/navigation';
+import { InsightsTab } from './interview-report/InsightsTab';
 
 interface Props {
     projectId: string;
     studyId: string;
     session: SimulationSession;
     persona?: Persona;
+    researchQuestions?: string[];
 }
 
-export function SimulationReport({ projectId, studyId, session, persona }: Props) {
+export function SimulationReport({ projectId, studyId, session, persona, researchQuestions = [] }: Props) {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const router = useRouter();
 
@@ -50,8 +51,8 @@ export function SimulationReport({ projectId, studyId, session, persona }: Props
                     {session.messages.map((m) => (
                         <div key={m.id} className={`flex ${m.role === 'interviewer' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${m.role === 'interviewer'
-                                    ? 'bg-brand-600 text-white rounded-br-none'
-                                    : 'bg-slate-50 text-slate-800 rounded-bl-none border border-slate-100'
+                                ? 'bg-brand-600 text-white rounded-br-none'
+                                : 'bg-slate-50 text-slate-800 rounded-bl-none border border-slate-100'
                                 }`}>
                                 {m.text}
                             </div>
@@ -67,7 +68,7 @@ export function SimulationReport({ projectId, studyId, session, persona }: Props
                         <span className="text-lg">🧠</span>
                         AI Insight Analysis
                     </div>
-                    {!session.insights && (
+                    {(!session.structuredData || session.structuredData.length === 0) && (
                         <button
                             onClick={handleAnalyze}
                             disabled={isAnalyzing}
@@ -78,10 +79,26 @@ export function SimulationReport({ projectId, studyId, session, persona }: Props
                     )}
                 </div>
                 <div className="flex-1 overflow-y-auto p-6">
-                    {session.insights ? (
-                        <div className="prose prose-sm prose-slate max-w-none">
-                            <ReactMarkdown>{session.insights}</ReactMarkdown>
-                        </div>
+                    {session.structuredData && session.structuredData.length > 0 ? (
+                        <InsightsTab
+                            interview={{
+                                id: session.id,
+                                title: 'Simulation',
+                                participantId: persona?.id || '',
+                                date: new Date(session.createdAt).toISOString(),
+                                startTime: '',
+                                endTime: '',
+                                content: session.messages.map(m => `[${m.role.toUpperCase()}]: ${m.text}`).join('\n'),
+                                structuredData: session.structuredData
+                            } as any}
+                            isAnalyzing={isAnalyzing}
+                            showAddInsight={false}
+                            onAddInsightCancel={() => { }}
+                            onAddInsightSubmit={async () => { }}
+                            onReanalyze={handleAnalyze}
+                            onJump={() => { }}
+                            researchQuestions={researchQuestions}
+                        />
                     ) : (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center p-8">
                             <div className="text-4xl mb-4 opacity-20">📊</div>

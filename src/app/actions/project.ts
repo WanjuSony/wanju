@@ -86,7 +86,8 @@ export async function createStudyAction(projectId: string, title: string, plan: 
     data.studies.push(newStudy);
     await saveProjectData(data);
 
-    redirect(`/projects/${projectId}/studies/${newStudy.id}/guide`);
+    revalidatePath(`/projects/${projectId}`);
+    return newStudy.id;
 }
 
 export async function updateStudyPlanFieldsAction(projectId: string, studyId: string, fields: Partial<StudyPlan>) {
@@ -163,6 +164,7 @@ export async function deleteProjectAction(projectId: string) {
 
 export async function deleteStudyAction(projectId: string, studyId: string) {
     await deleteStudy(studyId);
+    revalidatePath(`/projects/${projectId}`);
     redirect(`/projects/${projectId}`);
 }
 
@@ -250,16 +252,13 @@ export async function updateSimulationSessionsOrderAction(projectId: string, stu
 }
 
 export async function updateStudyStatusAction(projectId: string, studyId: string, status: 'planning' | 'recruiting' | 'fieldwork' | 'analysis' | 'done') {
-    const data = await getProject(projectId);
-    if (!data) throw new Error("Project not found");
+    const { error } = await supabase.from('studies').update({ status }).eq('id', studyId);
 
-    const study = data.studies.find(s => s.id === studyId);
-    if (!study) throw new Error("Study not found");
+    if (error) {
+        console.error("Failed to update study status directly:", error);
+        throw new Error(`Failed to update status: ${error.message}`);
+    }
 
-    study.status = status;
-    study.updatedAt = new Date().toISOString();
-
-    await saveProjectData(data);
     revalidatePath(`/projects/${projectId}`);
 }
 

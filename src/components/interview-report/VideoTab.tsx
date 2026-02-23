@@ -5,6 +5,7 @@ interface VideoTabProps {
     handleSaveVideoUrl: (url: string) => void;
     handleUploadVideo: (e: React.ChangeEvent<HTMLInputElement>) => void;
     isUploading: boolean;
+    uploadProgress: number | null;
     videoRef: React.RefObject<HTMLVideoElement | null>;
 }
 
@@ -33,6 +34,7 @@ export function VideoTab({
     handleSaveVideoUrl,
     handleUploadVideo,
     isUploading,
+    uploadProgress,
     videoRef
 }: VideoTabProps) {
     const [videoTabMode, setVideoTabMode] = useState<'upload' | 'embed'>('upload');
@@ -87,8 +89,16 @@ export function VideoTab({
                     </div>
 
                     {videoTabMode === 'upload' ? (
-                        <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold cursor-pointer transition flex items-center gap-2">
-                            <span>{isUploading ? '업로드 중...' : '비디오 파일 업로드'}</span>
+                        <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold cursor-pointer transition flex items-center gap-2 relative overflow-hidden min-w-[180px] justify-center">
+                            {uploadProgress !== null && (
+                                <div
+                                    className="absolute top-0 left-0 h-full bg-indigo-500/50 transition-all duration-300"
+                                    style={{ width: `${uploadProgress}%` }}
+                                />
+                            )}
+                            <span className="relative z-10">
+                                {isUploading ? (uploadProgress !== null ? `업로드 중... ${uploadProgress}%` : '업로드 중...') : '비디오 파일 업로드'}
+                            </span>
                             <input
                                 type="file"
                                 accept="video/*"

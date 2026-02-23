@@ -143,6 +143,7 @@ export default function ProjectList({ projects: initialProjects }: ProjectListPr
             ) : (
                 filter === 'all' ? (
                     <DndContext
+                        id="dnd-context"
                         sensors={sensors}
                         collisionDetection={closestCenter}
                         onDragEnd={handleDragEnd}

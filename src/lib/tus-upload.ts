@@ -6,7 +6,7 @@ import * as tus from 'tus-js-client';
  * This bypasses the 50MB limit on the standard free-tier Supabase edge network
  * by chunking the file.
  */
-export async function uploadFileWithTus(bucketName: string, file: File | Blob, fileName: string): Promise<string> {
+export async function uploadFileWithTus(bucketName: string, file: File | Blob, fileName: string, onProgress?: (percentage: number) => void): Promise<string> {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -39,8 +39,11 @@ export async function uploadFileWithTus(bucketName: string, file: File | Blob, f
                 reject(error);
             },
             onProgress: function (bytesUploaded, bytesTotal) {
-                const percentage = ((bytesUploaded / bytesTotal) * 100).toFixed(2);
+                const percentage = parseFloat(((bytesUploaded / bytesTotal) * 100).toFixed(2));
                 console.log(`[TUS] Uploading ${fileName}: ${percentage}%`);
+                if (onProgress) {
+                    onProgress(percentage);
+                }
             },
             onSuccess: function () {
                 console.log('TUS Upload Success:', upload.url);

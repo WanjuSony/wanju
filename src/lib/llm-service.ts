@@ -52,15 +52,18 @@ export async function generatePersonaFromContext(projectContext: string, jobRole
 
     const model = await getGeminiModel(apiKey, true);
 
+    const safeContext = projectContext || '';
+    const safeAdditional = additionalContext || '';
+
     const prompt = `
     You are an expert User Researcher.
     Create a detailed USER PERSONA based on the Project Context, Target Role, and any Reference Material.
     
     Context:
-    - Project: ${projectContext}
+    - Project: ${safeContext}
     - Target Role: ${jobRole}
     - Reference Material (Interview Scripts, etc): 
-      ${additionalContext.slice(0, 5000)} (Truncated if too long)
+      ${safeAdditional.slice(0, 5000)} (Truncated if too long)
 
     Output JSON format:
     {
@@ -122,8 +125,6 @@ export async function generatePersonaResponse(persona: Persona, history: { role:
     const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) return `(System: GOOGLE_API_KEY is missing. I cannot reply as ${persona.name}.)`;
 
-    const model = await getGeminiModel(apiKey); // Standard model for fast chat
-
     const systemPrompt = `
     You are ${persona.name}.
     Role: ${persona.role} at ${persona.company || 'a company'}.
@@ -142,6 +143,8 @@ export async function generatePersonaResponse(persona: Persona, history: { role:
     3. **Context Aware**: If "PRIOR INTERVIEW MEMORY" is provided in the context, you MUST use it. You are the same person who gave that interview. Refer to your past experiences mentioned there.
     4. **NO LISTS**: Do NOT use numbered lists. Speak in a continuous, natural flow.
     5. **NO BOLD TEXT**: Do NOT use bold text (**...**) anywhere. Keep it plain text.
+    6. **ONE TURN ONLY**: You must ONLY answer the immediate question asked by the interviewer. Do NOT generate follow-up questions for yourself to answer. Do NOT simulate the interviewer's voice. STOP generating once you have answered the current question.
+    7. **NO Q&A FORMAT**: Never write things like "Q: ... A: ..." or "🔥질문: ...". Just provide your answer directly as the persona.
 
     Respond in KOREAN (한국어).
     `;
@@ -152,35 +155,25 @@ export async function generatePersonaResponse(persona: Persona, history: { role:
     // But since this is a stateless call, we might just pass the whole thing as a prompt or use chat session.
     // Let's use startChat for better context handling.
 
+    const model = await getGeminiModel(apiKey, false, systemPrompt); // Pass systemPrompt natively
+
     try {
-        // ... (preserving original logic for history assembly)
         let prompt = "";
         const historyForChat = [...history]; // Clone
         const lastMsg = historyForChat[historyForChat.length - 1];
 
-        if (lastMsg && lastMsg.role === 'interviewer') {
+        if (lastMsg && lastMsg.role === 'user') {
             prompt = lastMsg.content;
             historyForChat.pop(); // Remove it from history to send it as `sendMessage`
         } else {
-            // Should not happen if user just sent a message
             prompt = "(System: Please continue)";
         }
 
         const chatSession = model.startChat({
-            history: [
-                {
-                    role: "user",
-                    parts: [{ text: systemPrompt }]
-                },
-                {
-                    role: "model",
-                    parts: [{ text: "네, 준비되었습니다. 편하게 질문해 주세요." }]
-                },
-                ...historyForChat.map(m => ({
-                    role: m.role === 'interviewer' ? 'user' : 'model',
-                    parts: [{ text: m.content }]
-                }))
-            ]
+            history: historyForChat.map(m => ({
+                role: m.role === 'user' ? 'user' : 'model',
+                parts: [{ text: m.content }]
+            }))
         });
 
         const result = await chatSession.sendMessage(prompt);
@@ -427,20 +420,16 @@ export async function generateWeeklyReport(
     
     # [Generate Title Here]
     
-    ## 1. 개요 (Overview)
-    - 참여 인원: ${interviews.length}명
-    - 기간: [Date Range]
-    
-    ## 2. 가설 검증 (Hypothesis Verification)
+    ## 1. 가설 검증 (Hypothesis Verification)
     (For EACH Research Question...)
     - **Status**: [Status Icon] [Confidence Score]%
     - **Reasoning**: ...
     
-    ## 3. 주요 발견점 (Key Insights)
+    ## 2. 주요 발견점 (Key Insights)
     
-    ## 4. 인상적인 인용구 (Voice of Customer)
+    ## 3. 인상적인 인용구 (Voice of Customer)
     
-    ## 5. 결론 및 제안 (Action Items)
+    ## 4. 결론 및 제안 (Action Items)
 
     Respond in KOREAN (한국어).
     `;

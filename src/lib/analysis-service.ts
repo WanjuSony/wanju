@@ -66,7 +66,7 @@ export async function analyzeTranscript(transcript: Transcript, context?: Analys
     
     Output JSON format:
     {
-        "summary": "Start with '## 1. 개요 (Overview)' and '## 2. 주요 테마 (Key Themes)'. Use Markdown. Detailed summary of the interview.",
+        "summary": "Provide a concise summary of the interview in Markdown format. Avoid using structured headings like '개요' or '주요 테마'.",
         "insights": [
             {
                 "type": "fact" | "insight" | "action",
@@ -74,7 +74,7 @@ export async function analyzeTranscript(transcript: Transcript, context?: Analys
                 "meaning": "Why this matters / Context (REQUIRED). Explain the background or significance of this finding.",
                 "recommendation": "Actionable step (optional, for actions)",
                 "sourceSegmentId": "Best matching Timestamp (MM:SS). FIND THE CLOSEST MATCHING QUOTE. Do not leave empty.",
-                "researchQuestion": "The specific research question (RQ1, RQ2...) this insight answers. Categorize into the most relevant one from the list above. If it doesn't fit any, use 'General'."
+                "researchQuestion": "The EXACT string of the specific research question this insight answers from the list above. Do NOT use abbreviations like 'RQ1'. Copy the exact text of the question. If it doesn't fit any, exactly use 'General'."
             }
         ]
     }

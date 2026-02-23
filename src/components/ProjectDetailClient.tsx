@@ -88,12 +88,12 @@ export default function ProjectDetailClient({ project, studies, personas }: Proj
                                                 />
                                                 <div className="absolute top-0 left-0 w-2 h-full bg-brand-500 rounded-l-[2.5rem] opacity-0 group-hover:opacity-100 transition-opacity z-20"></div>
 
-                                                <div className="relative z-0">
+                                                <div className="relative z-20 pointer-events-none flex-1 flex flex-col">
                                                     <div className="flex justify-between items-start mb-6">
                                                         <div>
                                                             <div className="flex items-center gap-2 mb-2">
                                                                 <span className="text-[10px] font-black text-brand-600 bg-brand-50 border border-brand-100 px-2.5 py-1 rounded-full uppercase tracking-widest shadow-sm">
-                                                                    {study.plan.methodology.type}
+                                                                    {study.plan?.methodology?.type || 'UNKNOWN'}
                                                                 </span>
                                                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                                                     Created {formatDate(study.createdAt)}
@@ -103,12 +103,14 @@ export default function ProjectDetailClient({ project, studies, personas }: Proj
                                                                 {study.title}
                                                             </h3>
                                                         </div>
-                                                        <StudyStatusSelector
-                                                            projectId={project.id}
-                                                            studyId={study.id}
-                                                            currentStatus={study.status}
-                                                            readonly={true}
-                                                        />
+                                                        <div className="pointer-events-auto">
+                                                            <StudyStatusSelector
+                                                                projectId={project.id}
+                                                                studyId={study.id}
+                                                                currentStatus={study.status}
+                                                                readonly={true}
+                                                            />
+                                                        </div>
                                                     </div>
                                                     <div className="mt-6 mb-4 space-y-2">
                                                         {study.plan?.researchQuestions?.slice(0, 3).map((question, idx) => {
@@ -153,10 +155,10 @@ export default function ProjectDetailClient({ project, studies, personas }: Proj
                                                                 Manage Study &rarr;
                                                             </span>
                                                             <span className="text-slate-400 font-bold bg-slate-50 px-3 py-1 rounded-xl">
-                                                                {study.sessions.length} Interviews / {new Set(study.sessions.map(s => s.participantId).filter(Boolean)).size} Personas
+                                                                {(study.sessions || []).length} Interviews / {new Set((study.sessions || []).map(s => s.participantId).filter(Boolean)).size} Personas
                                                             </span>
                                                         </div>
-                                                        <div className="relative z-20">
+                                                        <div className="relative z-20 pointer-events-auto">
                                                             <DeleteStudyButton projectId={project.id} studyId={study.id} />
                                                         </div>
                                                     </div>

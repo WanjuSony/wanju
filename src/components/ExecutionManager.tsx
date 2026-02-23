@@ -50,6 +50,7 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
     const [audioFile, setAudioFile] = useState<File | null>(null);
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const [participantId, setParticipantId] = useState<string>('new');
 
     // Editing States
@@ -77,7 +78,8 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
 
                 // Use TUS for files > 6MB, otherwise standard upload
                 if (audioFile.size > 6 * 1024 * 1024) {
-                    const publicUrl = await uploadFileWithTus('uploads', audioFile, fileName);
+                    setUploadProgress(0);
+                    const publicUrl = await uploadFileWithTus('uploads', audioFile, fileName, (p) => setUploadProgress(p));
                     formData.append('audio_url', publicUrl);
                 } else {
                     const { error } = await supabase.storage.from('uploads').upload(fileName, audioFile, { upsert: true });
@@ -92,7 +94,8 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
 
                 // Use TUS for files > 6MB, otherwise standard upload
                 if (videoFile.size > 6 * 1024 * 1024) {
-                    const publicUrl = await uploadFileWithTus('uploads', videoFile, fileName);
+                    setUploadProgress(0);
+                    const publicUrl = await uploadFileWithTus('uploads', videoFile, fileName, (p) => setUploadProgress(p));
                     formData.append('video_url', publicUrl);
                 } else {
                     const { error } = await supabase.storage.from('uploads').upload(fileName, videoFile, { upsert: true });
@@ -122,8 +125,18 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
             setTextFile(null);
             setAudioFile(null);
             setVideoFile(null);
+            alert("인터뷰가 성공적으로 추가되었습니다! 페르소나가 새롭게 생성되거나 정보가 업데이트되었습니다.");
+
+            router.refresh(); // Fetch new data from server to be sure
+
+            setAddMode(null);
+            setTextFile(null);
+            setAudioFile(null);
+            setVideoFile(null);
             setParticipantId('new');
+            setUploadProgress(null);
         } catch (e: any) {
+            setUploadProgress(null);
             if (e.message === 'NEXT_REDIRECT') return;
             console.error("Upload failed in ExecutionManager:", e);
             alert(e.message || "Failed to analyze interview");
@@ -179,6 +192,7 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
             alert("녹음 연결 실패: " + e.message);
         } finally {
             setSyncingId(null);
+            setUploadProgress(null);
         }
     };
 
@@ -189,7 +203,8 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
             let publicUrl = '';
 
             if (file.size > 6 * 1024 * 1024) {
-                publicUrl = await uploadFileWithTus('uploads', file, fileName);
+                setUploadProgress(0);
+                publicUrl = await uploadFileWithTus('uploads', file, fileName, (p) => setUploadProgress(p));
             } else {
                 const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
                 if (error) throw new Error("비디오 파일 업로드 실패: " + error.message);
@@ -206,6 +221,7 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
             alert("비디오 연결 실패: " + e.message);
         } finally {
             setSyncingId(null);
+            setUploadProgress(null);
         }
     };
 
@@ -461,9 +477,18 @@ export function ExecutionManager({ projectId, studyId, interviews: initialInterv
                                 <button
                                     onClick={handleAdd}
                                     disabled={loading || (!textFile && !audioFile && !videoFile)}
-                                    className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-bold hover:bg-brand-700 disabled:opacity-50 min-w-[100px] shadow-sm"
+                                    className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-bold hover:bg-brand-700 disabled:opacity-50 min-w-[100px] shadow-sm relative overflow-hidden"
                                 >
-                                    {loading ? '분석 중...' : '업로드 및 분석 시작'}
+                                    {/* Progress Background */}
+                                    {uploadProgress !== null && (
+                                        <div
+                                            className="absolute top-0 left-0 h-full bg-brand-500/50 transition-all duration-300"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        />
+                                    )}
+                                    <span className="relative z-10">
+                                        {loading ? (uploadProgress !== null ? `업로드 중... ${uploadProgress}%` : '분석 중...') : '업로드 및 분석 시작'}
+                                    </span>
                                 </button>
                             </div>
                         </>

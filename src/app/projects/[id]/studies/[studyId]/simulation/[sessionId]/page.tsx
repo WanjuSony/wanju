@@ -44,6 +44,7 @@ export default async function ResumeSimulationPage({ params }: Props) {
                     personas={data.personas || []}
                     guide={study.discussionGuide || []}
                     initialSession={session}
+                    researchQuestions={study.plan.researchQuestions || []}
                 />
             </main>
         </div>
