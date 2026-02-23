@@ -9,6 +9,7 @@ import TextareaAutosize from 'react-textarea-autosize';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { supabase } from '@/lib/supabase';
+import { uploadFileWithTus } from '@/lib/tus-upload';
 
 interface Props {
     projectId: string;
@@ -166,13 +167,19 @@ export default function LiveInterviewManager({ projectId, studyId, guideBlocks, 
 
             // Upload to Supabase DIRECTLY from browser
             if (blob.size > 0) {
-                const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
-                if (error) {
-                    console.error("Live Audio Upload Error:", error);
-                    alert("녹음 파일 업로드 중 오류가 발생했습니다. (" + error.message + ")");
+                let publicUrl = '';
+                if (file.size > 6 * 1024 * 1024) {
+                    publicUrl = await uploadFileWithTus('uploads', file, fileName);
+                    formData.append('audioUrl', publicUrl);
                 } else {
-                    const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
-                    formData.append('audioUrl', data.publicUrl);
+                    const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
+                    if (error) {
+                        console.error("Live Audio Upload Error:", error);
+                        alert("녹음 파일 업로드 중 오류가 발생했습니다. (" + error.message + ")");
+                    } else {
+                        const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+                        formData.append('audioUrl', data.publicUrl);
+                    }
                 }
             }
 

@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { PersonaDetail } from './PersonaDetail';
 import remarkGfm from 'remark-gfm';
 import { parseTranscriptContent } from '@/lib/transcript-parser';
+import { uploadFileWithTus } from '@/lib/tus-upload';
 import Link from 'next/link';
 import TextareaAutosize from 'react-textarea-autosize';
 import { InsightsTab } from './interview-report/InsightsTab';
@@ -408,12 +409,19 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         setIsUploading(true);
         try {
             const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-            const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
-            if (error) throw new Error("음성 파일 업로드 실패: " + error.message);
-            const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+            let publicUrl = '';
+
+            if (file.size > 6 * 1024 * 1024) {
+                publicUrl = await uploadFileWithTus('uploads', file, fileName);
+            } else {
+                const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
+                if (error) throw new Error("음성 파일 업로드 실패: " + error.message);
+                const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+                publicUrl = data.publicUrl;
+            }
 
             const formData = new FormData();
-            formData.append('fileUrl', data.publicUrl);
+            formData.append('fileUrl', publicUrl);
             const updatedInterview = await uploadInterviewAudioAction(projectId, studyId, interview.id, formData);
             if (updatedInterview) {
                 setInterview(updatedInterview as any);
@@ -435,12 +443,19 @@ export function InterviewReport({ interview: initialInterview, projectId, studyI
         setIsUploading(true);
         try {
             const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-            const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
-            if (error) throw new Error("비디오 파일 업로드 실패: " + error.message);
-            const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+            let publicUrl = '';
+
+            if (file.size > 6 * 1024 * 1024) {
+                publicUrl = await uploadFileWithTus('uploads', file, fileName);
+            } else {
+                const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
+                if (error) throw new Error("비디오 파일 업로드 실패: " + error.message);
+                const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+                publicUrl = data.publicUrl;
+            }
 
             const formData = new FormData();
-            formData.append('fileUrl', data.publicUrl);
+            formData.append('fileUrl', publicUrl);
             const updatedInterview = await uploadInterviewVideoAction(projectId, studyId, interview.id, formData);
             if (updatedInterview) {
                 setInterview(updatedInterview as any);
