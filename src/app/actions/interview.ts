@@ -118,6 +118,8 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
     const fileText = formData.get('file_text') as File | null;
     const fileAudio = formData.get('file_audio') as File | null;
     const fileVideo = formData.get('file_video') as File | null;
+    const clientAudioUrl = formData.get('audio_url') as string | null;
+    const clientVideoUrl = formData.get('video_url') as string | null;
     const legacyFiles = formData.getAll('files') as File[];
 
     const participantId = formData.get('participantId') as string;
@@ -128,14 +130,24 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
     // Helper to upload media
     const uploadFileToSupabase = async (file: File) => {
         const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-        const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
-        if (error) throw new Error("Failed to upload file to Supabase Storage");
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const { error } = await supabase.storage.from('uploads').upload(fileName, buffer, {
+            upsert: true,
+            contentType: file.type
+        });
+        if (error) throw new Error(`Supabase Storage Upload Error: ${error.message} (File: ${file.name})`);
         const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
         return data.publicUrl;
     };
 
+    // Fetch project to keep JSON state in sync
+    const data = await getProject(projectId);
+    if (!data) throw new Error("Project not found");
+    const studyIndex = data.studies.findIndex(s => s.id === studyId);
+    if (studyIndex === -1) throw new Error("Study not found");
+
     // 1. Single Interview Creation (Mixed Media)
-    if (fileText || fileAudio || fileVideo) {
+    if (fileText || fileAudio || fileVideo || clientAudioUrl || clientVideoUrl) {
         let content = '';
         let segments: any[] = [];
         let title = '';
@@ -174,11 +186,15 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
         if (fileAudio) {
             audioUrl = await uploadFileToSupabase(fileAudio);
             if (!title) title = fileAudio.name.replace(/\.[^/.]+$/, "");
+        } else if (clientAudioUrl) {
+            audioUrl = clientAudioUrl;
         }
 
         if (fileVideo) {
             videoUrl = await uploadFileToSupabase(fileVideo);
             if (!title) title = fileVideo.name.replace(/\.[^/.]+$/, "");
+        } else if (clientVideoUrl) {
+            videoUrl = clientVideoUrl;
         }
 
         if (!title) title = `Interview - ${date}`;
@@ -225,8 +241,12 @@ export async function uploadTranscriptAction(projectId: string, studyId: string,
             throw new Error(`DB Insert Failed: ${error.message}`);
         }
 
-        // Update study status to field work if needed (Direct Update)
-        await supabase.from('studies').update({ status: 'fieldwork' }).eq('id', studyId);
+        // Keep JSON in sync to prevent 404
+        data.studies[studyIndex].sessions.push(newInterview);
+        if (data.studies[studyIndex].status === 'planning') {
+            data.studies[studyIndex].status = 'fieldwork';
+        }
+        await saveProjectData(data);
 
         revalidatePath(`/projects/${projectId}/studies/${studyId}`);
 
@@ -297,64 +317,99 @@ export async function uploadInterviewTranscriptAction(projectId: string, studyId
 }
 
 export async function uploadInterviewAudioAction(projectId: string, studyId: string, interviewId: string, formData: FormData) {
-    const file = formData.get('file') as File;
-    if (!file) return;
+    const file = formData.get('file') as File | null;
+    const fileUrl = formData.get('fileUrl') as string | null;
+
+    if (!file && !fileUrl) throw new Error("No file or URL provided");
 
     const data = await getProject(projectId);
-    if (!data) return;
+    if (!data) throw new Error("Project not found");
 
-    const study = data.studies.find(s => s.id === studyId);
-    const interview = study?.sessions.find(i => i.id === interviewId);
-    if (!interview) return;
+    const studyIndex = data.studies.findIndex(s => s.id === studyId);
+    if (studyIndex === -1) throw new Error("Study not found");
+    const interviewIndex = data.studies[studyIndex].sessions.findIndex(i => i.id === interviewId);
+    if (interviewIndex === -1) throw new Error("Interview not found");
 
-    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const { error } = await supabase.storage.from('uploads').upload(fileName, file, {
-        upsert: true
-    });
+    let finalUrl = fileUrl || '';
 
-    if (error) {
-        console.error("Supabase Storage Upload Error:", error);
-        return;
+    if (file && !fileUrl) {
+        const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const { error } = await supabase.storage.from('uploads').upload(fileName, buffer, {
+            upsert: true,
+            contentType: file.type
+        });
+
+        if (error) {
+            console.error("Supabase Storage Upload Error:", error);
+            throw new Error(`Supabase Storage Upload Error: ${error.message}`);
+        }
+
+        const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+        finalUrl = publicUrlData.publicUrl;
     }
 
-    const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
     // Surgical Update for Reliability
-    // We update recording_url. Note: Our system uses one URL field for both audio/video in many places, 
-    // but the DB column is 'recording_url'. 
     await supabase.from('interviews').update({
-        recording_url: publicUrlData.publicUrl
+        recording_url: finalUrl
     }).eq('id', interviewId);
+
+    // Keep JSON structure in sync
+    data.studies[studyIndex].sessions[interviewIndex].audioUrl = finalUrl;
+    // ensure recordingUrl is also set if it exists on the type
+    if (!(data.studies[studyIndex].sessions[interviewIndex] as any).recordingUrl) {
+        (data.studies[studyIndex].sessions[interviewIndex] as any).recordingUrl = finalUrl;
+    }
+    await saveProjectData(data);
 
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
     return await getInterview(interviewId);
 }
 
 export async function uploadInterviewVideoAction(projectId: string, studyId: string, interviewId: string, formData: FormData) {
-    const file = formData.get('file') as File;
-    if (!file) return;
+    const file = formData.get('file') as File | null;
+    const fileUrl = formData.get('fileUrl') as string | null;
+
+    if (!file && !fileUrl) throw new Error("No file or URL provided");
 
     const data = await getProject(projectId);
-    if (!data) return;
+    if (!data) throw new Error("Project not found");
 
-    const study = data.studies.find(s => s.id === studyId);
-    const interview = study?.sessions.find(i => i.id === interviewId);
-    if (!interview) return;
+    const studyIndex = data.studies.findIndex(s => s.id === studyId);
+    if (studyIndex === -1) throw new Error("Study not found");
+    const interviewIndex = data.studies[studyIndex].sessions.findIndex(i => i.id === interviewId);
+    if (interviewIndex === -1) throw new Error("Interview not found");
 
-    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const { error } = await supabase.storage.from('uploads').upload(fileName, file, {
-        upsert: true
-    });
+    let finalUrl = fileUrl || '';
 
-    if (error) {
-        console.error("Supabase Storage Upload Error:", error);
-        return;
+    if (file && !fileUrl) {
+        const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const { error } = await supabase.storage.from('uploads').upload(fileName, buffer, {
+            upsert: true,
+            contentType: file.type
+        });
+
+        if (error) {
+            console.error("Supabase Storage Upload Error:", error);
+            throw new Error(`Supabase Storage Upload Error: ${error.message}`);
+        }
+
+        const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+        finalUrl = publicUrlData.publicUrl;
     }
-
-    const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
     // Surgical Update
     await supabase.from('interviews').update({
-        recording_url: publicUrlData.publicUrl
+        recording_url: finalUrl
     }).eq('id', interviewId);
+
+    // Keep JSON structure in sync
+    data.studies[studyIndex].sessions[interviewIndex].videoUrl = finalUrl;
+    // ensure recordingUrl is also set if it exists on the type
+    if (!(data.studies[studyIndex].sessions[interviewIndex] as any).recordingUrl) {
+        (data.studies[studyIndex].sessions[interviewIndex] as any).recordingUrl = finalUrl;
+    }
+    await saveProjectData(data);
 
     revalidatePath(`/projects/${projectId}/studies/${studyId}/interviews/${interviewId}`);
     return await getInterview(interviewId);
@@ -362,6 +417,7 @@ export async function uploadInterviewVideoAction(projectId: string, studyId: str
 
 export async function uploadLiveInterviewAction(projectId: string, studyId: string, formData: FormData) {
     const audioFile = formData.get('audioFile') as File | null;
+    const clientAudioUrl = formData.get('audioUrl') as string | null;
     const notesStr = formData.get('notes') as string;
     const notes = JSON.parse(notesStr || '{}');
     const participantId = formData.get('participantId') as string;
@@ -385,14 +441,16 @@ export async function uploadLiveInterviewAction(projectId: string, studyId: stri
     const studyIndex = data.studies.findIndex(s => s.id === studyId);
     if (studyIndex === -1) throw new Error('Study not found');
 
-    let savedAudioUrl = undefined;
-    if (audioFile && audioFile.size > 0) {
+    let savedAudioUrl = clientAudioUrl || undefined;
+    if (audioFile && !clientAudioUrl && audioFile.size > 0) {
         try {
             const ext = path.extname(audioFile.name) || '.webm';
             const fileName = `live-audio-${Date.now()}${ext}`;
 
-            const { error } = await supabase.storage.from('uploads').upload(fileName, audioFile, {
-                upsert: true
+            const buffer = Buffer.from(await audioFile.arrayBuffer());
+            const { error } = await supabase.storage.from('uploads').upload(fileName, buffer, {
+                upsert: true,
+                contentType: audioFile.type
             });
 
             if (error) {
@@ -424,6 +482,27 @@ export async function uploadLiveInterviewAction(projectId: string, studyId: stri
         participantId: participantId === 'new' ? undefined : participantId,
         note: notes
     };
+
+    // Surgical Insert into Database
+    const { error: insertError } = await supabase.from('interviews').insert({
+        id: newInterview.id,
+        project_id: projectId,
+        study_id: studyId,
+        title: newInterview.title,
+        date: newInterview.date,
+        start_time: newInterview.startTime,
+        end_time: newInterview.endTime,
+        transcript: newInterview.content,
+        segments: newInterview.segments,
+        recording_url: savedAudioUrl,
+        summary: newInterview.summary,
+        participant_id: participantId === 'new' ? null : participantId
+    });
+
+    if (insertError) {
+        console.error("Failed to insert live interview:", insertError);
+        throw new Error(`DB Insert Failed: ${insertError.message}`);
+    }
 
     data.studies[studyIndex].sessions.push(newInterview);
 

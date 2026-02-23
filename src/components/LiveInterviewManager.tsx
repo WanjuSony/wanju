@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import TextareaAutosize from 'react-textarea-autosize';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
     projectId: string;
@@ -160,8 +161,21 @@ export default function LiveInterviewManager({ projectId, studyId, guideBlocks, 
 
         try {
             const formData = new FormData();
-            const file = new File([blob], `recording-${Date.now()}.webm`, { type: 'audio/webm' });
-            formData.append('audioFile', file);
+            const fileName = `live-audio-${Date.now()}.webm`;
+            const file = new File([blob], fileName, { type: 'audio/webm' });
+
+            // Upload to Supabase DIRECTLY from browser
+            if (blob.size > 0) {
+                const { error } = await supabase.storage.from('uploads').upload(fileName, file, { upsert: true });
+                if (error) {
+                    console.error("Live Audio Upload Error:", error);
+                    alert("녹음 파일 업로드 중 오류가 발생했습니다. (" + error.message + ")");
+                } else {
+                    const { data } = supabase.storage.from('uploads').getPublicUrl(fileName);
+                    formData.append('audioUrl', data.publicUrl);
+                }
+            }
+
             formData.append('notes', JSON.stringify(notes));
             formData.append('participantId', participantId);
 
